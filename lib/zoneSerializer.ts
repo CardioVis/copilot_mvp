@@ -1,8 +1,10 @@
-import { Zone } from "./types";
+import { Zone, ZoneFillStyle } from "./types";
+
+const VALID_FILL_STYLES: ZoneFillStyle[] = ["hatch", "solid", "outline", "dashed"];
 
 /**
  * Text format:
- *   ZONE:<id>:<name>:<color>:<opacity>
+ *   ZONE:<id>:<name>:<color>:<opacity>:<fillStyle>:[<labelX>,<labelY>]
  *   x,y
  *   x,y
  *   ...
@@ -11,7 +13,10 @@ import { Zone } from "./types";
 export function serializeZones(zones: Zone[]): string {
   return zones
     .map((zone) => {
-      const header = `ZONE:${zone.id}:${zone.name}:${zone.color}:${zone.opacity}`;
+      let header = `ZONE:${zone.id}:${zone.name}:${zone.color}:${zone.opacity}:${zone.fillStyle ?? "hatch"}`;
+      if (zone.labelPos) {
+        header += `:[${zone.labelPos.x.toFixed(6)},${zone.labelPos.y.toFixed(6)}]`;
+      }
       const points = zone.points
         .map((p) => `${p.x.toFixed(6)},${p.y.toFixed(6)}`)
         .join("\n");
@@ -31,13 +36,27 @@ export function deserializeZones(text: string): Zone[] {
 
     if (trimmed.startsWith("ZONE:")) {
       if (currentZone) zones.push(currentZone);
-      const parts = trimmed.substring(5).split(":");
+      
+      const headerStr = trimmed.substring(5);
+      const lpMatch = headerStr.match(/(:\[([\d.-]+),([\d.-]+)\])$/);
+      let partsStr = headerStr;
+      let labelPos;
+      if (lpMatch) {
+        partsStr = headerStr.slice(0, -lpMatch[1].length);
+        labelPos = { x: parseFloat(lpMatch[2]), y: parseFloat(lpMatch[3]) };
+      }
+      
+      const parts = partsStr.split(":");
+      const parsedStyle = parts[4] as ZoneFillStyle | undefined;
       currentZone = {
         id: parts[0] || crypto.randomUUID(),
         name: parts[1] || "Unnamed",
         color: parts[2] || "#ef4444",
         opacity: parseFloat(parts[3]) || 0.3,
         points: [],
+        visible: true,
+        fillStyle: parsedStyle && VALID_FILL_STYLES.includes(parsedStyle) ? parsedStyle : "hatch",
+        labelPos,
       };
     } else if (currentZone) {
       const [xStr, yStr] = trimmed.split(",");

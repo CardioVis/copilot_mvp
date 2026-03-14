@@ -25,7 +25,7 @@ export default function SideBar({
 }: SideBarProps) {
   if (!isOpen) return null;
 
-  const [editorOpen, setEditorOpen] = useState(true);
+  const [editorOpen, setEditorOpen] = useState(false);
 
   return (
     <aside className="flex h-full w-64 flex-shrink-0 flex-col border-r border-zinc-800 bg-zinc-950">
@@ -80,7 +80,7 @@ function CollapsibleSection({
         <span>{title}</span>
         <span className="text-[10px]">{isOpen ? "▲" : "▼"}</span>
       </button>
-      {isOpen && <div className="mt-2">{children}</div>}
+      <div className={`mt-2 ${isOpen ? "" : "hidden"}`}>{children}</div>
     </div>
   );
 }
@@ -89,19 +89,23 @@ const HARDCODED_ACCURACY = 92.7;
 
 function DangerZonesContent({ zones }: { zones: Zone[] }) {
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       {zones.length === 0 ? (
-        <p className="text-xs text-zinc-600">No zones defined yet.</p>
+        <p className="text-xs text-zinc-600">No danger zones found.</p>
       ) : (
         zones.map((zone) => (
-          <div
-            key={zone.id}
-            className="rounded border border-zinc-800 bg-zinc-900 p-2.5"
-          >
-            <p className="text-xs font-medium text-red-400">{zone.name}</p>
-            <div className="mt-1.5 flex items-center justify-between text-xs">
-              <span className="text-zinc-500">Accuracy</span>
-              <span className="font-mono text-zinc-300">{HARDCODED_ACCURACY}%</span>
+          <div key={zone.id}>
+            <p className="text-sm font-medium text-white">{zone.name}</p>
+            <div className="mt-1.5 flex items-center gap-2 text-xs">
+              <div className="flex-1 h-1.5 bg-zinc-700 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-emerald-500 rounded-full transition-all"
+                  style={{ width: `${HARDCODED_ACCURACY}%` }}
+                />
+              </div>
+              <span className="font-mono text-zinc-400 text-[10px] w-10 text-right">
+                {HARDCODED_ACCURACY}%
+              </span>
             </div>
           </div>
         ))

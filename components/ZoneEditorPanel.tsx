@@ -1,20 +1,27 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Zone } from "@/lib/types";
+import { Zone, ZoneFillStyle } from "@/lib/types";
 import { serializeZones, deserializeZones } from "@/lib/zoneSerializer";
 
 const DEFAULT_SCRIPT_URL =
   "https://script.google.com/macros/s/AKfycbwsrp7iUZZN2UJaIRfyER9YNDqF2pIiHAPJtBq_fUQTTGt0a8LWO1RFTExwV-kI4uMyTA/exec";
 
 const ZONE_COLORS = [
-  "#ef4444",
-  "#f97316",
-  "#eab308",
-  "#22c55e",
-  "#3b82f6",
-  "#a855f7",
-  "#ec4899",
+  "#ff2d2d", // bright red — high danger
+  "#ff5533", // red-orange — elevated warning
+  "#ff8800", // orange — moderate warning
+  "#ffcc00", // amber — caution
+  "#33dd55", // green — safe / informational
+  "#3b82f6", // blue — neutral annotation
+  "#a855f7", // purple — custom / special
+];
+
+const FILL_STYLES: { value: ZoneFillStyle; label: string }[] = [
+  { value: "hatch", label: "Hatch" },
+  { value: "solid", label: "Solid" },
+  { value: "outline", label: "Outline" },
+  { value: "dashed", label: "Dashed" },
 ];
 
 interface ZoneEditorPanelProps {
@@ -72,6 +79,7 @@ export default function ZoneEditorPanel({
       color: ZONE_COLORS[zones.length % ZONE_COLORS.length],
       opacity: 0.3,
       points: [],
+      visible: true,
     };
     onSetZones([...zones, newZone]);
     onSetActiveZoneId(newZone.id);
@@ -188,7 +196,20 @@ export default function ZoneEditorPanel({
               }}
             />
             <span className="flex-1 truncate">{zone.name}</span>
-            <span className="font-mono text-zinc-600">{zone.points.length}pt</span>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                updateZone(zone.id, { visible: zone.visible === false });
+              }}
+              className={`shrink-0 text-[10px] font-mono leading-none transition-colors ${
+                zone.visible !== false
+                  ? "text-zinc-400 hover:text-zinc-200"
+                  : "text-zinc-600 hover:text-zinc-400"
+              }`}
+              title={zone.visible !== false ? "Hide zone" : "Show zone"}
+            >
+              {zone.visible !== false ? "ON" : "OFF"}
+            </button>
           </div>
         ))}
         <button
@@ -251,6 +272,25 @@ export default function ZoneEditorPanel({
               }
               className="mt-0.5 w-full accent-teal-500"
             />
+          </div>
+
+          <div>
+            <label className="text-[10px] uppercase text-zinc-600">Style</label>
+            <div className="mt-0.5 flex gap-1">
+              {FILL_STYLES.map((s) => (
+                <button
+                  key={s.value}
+                  onClick={() => updateZone(activeZone.id, { fillStyle: s.value })}
+                  className={`flex-1 rounded border px-1 py-0.5 text-[10px] transition-colors ${
+                    (activeZone.fillStyle ?? "hatch") === s.value
+                      ? "border-teal-500 bg-teal-500/20 text-teal-300"
+                      : "border-zinc-700 text-zinc-400 hover:border-zinc-600"
+                  }`}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           <p className="text-[10px] text-zinc-600">

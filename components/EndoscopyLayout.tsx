@@ -13,9 +13,9 @@ export default function EndoscopyLayout({ children }: { children: React.ReactNod
   const [editMode, setEditMode] = useState(false);
 
   const handleUpdateZone = useCallback(
-    (zoneId: string, points: Point[]) => {
+    (zoneId: string, updates: Partial<Zone>) => {
       setZones((prev) =>
-        prev.map((z) => (z.id === zoneId ? { ...z, points } : z))
+        prev.map((z) => (z.id === zoneId ? { ...z, ...updates } : z))
       );
     },
     []

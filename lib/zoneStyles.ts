@@ -1,0 +1,97 @@
+import { ZoneFillStyle } from "./types";
+
+/* ── Hatch pattern config ── */
+export const hatch = {
+  /** Gap between hatch lines (px). Larger = more spacing. */
+  spacing: 32,
+  /** Thickness of each hatch line (px). */
+  strokeWidth: 28,
+  /** Rotation angle of the hatch lines (degrees). */
+  angle: 45,
+  /** Length of the hatch line (px). Should be >= spacing. */
+  lineLength: 32,
+  /** Extra opacity boost added to the zone's base opacity. */
+  opacityBoost: 0.1,
+};
+
+/* ── Solid fill config ── */
+export const solid = {
+  /** Border stroke width (px). */
+  strokeWidth: 1,
+};
+
+/* ── Outline config ── */
+export const outline = {
+  /** Border stroke width (px). */
+  strokeWidth: 8,
+};
+
+/* ── Dashed config ── */
+export const dashed = {
+  /** Length of each dash (px). */
+  dashLength: 32,
+  /** Length of each gap (px). */
+  gapLength: 16,
+  /** Border stroke width (px). */
+  strokeWidth: 8,
+};
+
+/* ── Edit-mode indicator ── */
+export const editIndicator = {
+  /** Dash pattern shown on the active zone while editing (hatch style only). */
+  dashLength: 6,
+  gapLength: 3,
+  strokeWidth: 2,
+};
+
+/* ── Helpers used by SegmentationOverlay ── */
+
+export function getHatchOpacity(baseOpacity: number): number {
+  return Math.max(0.2, Math.min(1, baseOpacity + hatch.opacityBoost));
+}
+
+export function getFill(style: ZoneFillStyle, color: string, patternId: string): string {
+  switch (style) {
+    case "solid":
+      return color;
+    case "outline":
+    case "dashed":
+      return "none";
+    default:
+      return `url(#${patternId})`;
+  }
+}
+
+export function getFillOpacity(style: ZoneFillStyle, opacity: number): number | undefined {
+  return style === "solid" ? opacity : undefined;
+}
+
+export function getStroke(
+  style: ZoneFillStyle,
+  color: string,
+  isActiveEdit: boolean,
+): string {
+  if (style === "hatch" && !isActiveEdit) return "none";
+  return color;
+}
+
+export function getStrokeWidth(style: ZoneFillStyle, isActiveEdit: boolean): number {
+  switch (style) {
+    case "outline":
+      return outline.strokeWidth;
+    case "dashed":
+      return dashed.strokeWidth;
+    case "solid":
+      return solid.strokeWidth;
+    case "hatch":
+      return isActiveEdit ? editIndicator.strokeWidth : 1;
+    default:
+      return 1;
+  }
+}
+
+export function getStrokeDasharray(style: ZoneFillStyle, isActiveEdit: boolean): string {
+  if (style === "dashed") return `${dashed.dashLength} ${dashed.gapLength}`;
+  if (isActiveEdit && style === "hatch") return `${editIndicator.dashLength} ${editIndicator.gapLength}`;
+  return "none";
+}

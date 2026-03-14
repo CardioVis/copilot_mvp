@@ -12,7 +12,7 @@ export default function TaskBar() {
 
             {/* Right section */}
             <div className="">
-                <button className="bg-red-brand hover:bg-red-brand/60 text-white rounded-md px-4 py-2 shadow transition-colors text-sm font-semibold flex gap-2 items-center">
+                <button className="hover:bg-red-brand/60 border-red-brand border-2 text-white rounded-md px-4 py-2 shadow transition-colors text-sm font-semibold flex gap-2 items-center">
                     Capture
                 </button>
             </div>

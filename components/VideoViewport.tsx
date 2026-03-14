@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { useEffect, useRef, useState } from "react";
 import SegmentationOverlay from "./SegmentationOverlay";
 import { Point, Zone } from "@/lib/types";
 
@@ -8,7 +9,7 @@ interface VideoViewportProps {
   zones: Zone[];
   activeZoneId: string | null;
   editMode: boolean;
-  onUpdateZone: (zoneId: string, points: Point[]) => void;
+  onUpdateZone: (zoneId: string, updates: Partial<Zone>) => void;
 }
 
 export default function VideoViewport({
@@ -17,14 +18,32 @@ export default function VideoViewport({
   editMode,
   onUpdateZone,
 }: VideoViewportProps) {
+  const mainRef = useRef<HTMLElement>(null);
+  const [size, setSize] = useState({ w: 0, h: 0 });
+
+  useEffect(() => {
+    const el = mainRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => {
+      const { width: pw, height: ph } = entry.contentRect;
+      if (pw / ph > 16 / 9) {
+        setSize({ w: Math.round(ph * (16 / 9)), h: Math.round(ph) });
+      } else {
+        setSize({ w: Math.round(pw), h: Math.round(pw * (9 / 16)) });
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   return (
-    <main className="relative flex-1 overflow-hidden bg-black">
+    <main ref={mainRef} className="flex flex-1 items-center justify-center overflow-hidden bg-black">
+      <div className="relative" style={{ width: size.w, height: size.h }}>
       <Image
-        src="/endoscopy.png"
+        src="/mitral_frame_1_modified.png"
         alt="Endoscopy video feed"
         fill
         priority
-        className="object-cover"
       />
       <SegmentationOverlay
         zones={zones}
@@ -32,6 +51,7 @@ export default function VideoViewport({
         editMode={editMode}
         onUpdateZone={onUpdateZone}
       />
+      </div>
     </main>
   );
 }
