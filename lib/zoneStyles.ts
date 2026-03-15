@@ -29,7 +29,7 @@ export const outline = {
 /* ── Dashed config ── */
 export const dashed = {
   /** Length of each dash (px). */
-  dashLength: 32,
+  dashLength: 24,
   /** Length of each gap (px). */
   gapLength: 16,
   /** Border stroke width (px). */
