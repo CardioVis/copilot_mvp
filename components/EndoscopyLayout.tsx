@@ -5,12 +5,22 @@ import TaskBar from "@/components/TaskBar";
 import SideBar from "@/components/SideBar";
 import VideoViewport from "@/components/VideoViewport";
 import { Point, Zone } from "@/lib/types";
+import { useZoneAnimation } from "@/hooks/useZoneAnimation";
 
 export default function EndoscopyLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [zones, setZones] = useState<Zone[]>([]);
   const [activeZoneId, setActiveZoneId] = useState<string | null>(null);
   const [editMode, setEditMode] = useState(false);
+
+  const {
+    isAnimating,
+    toggleAnimation,
+    animGroupOpacity,
+    labelScale,
+    showDangerIcon,
+    dangerBlinkOn,
+  } = useZoneAnimation();
 
   const handleUpdateZone = useCallback(
     (zoneId: string, updates: Partial<Zone>) => {
@@ -23,7 +33,7 @@ export default function EndoscopyLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-black text-zinc-100">
-      <TaskBar />
+      <TaskBar isAnimating={isAnimating} onToggleAnimation={toggleAnimation} />
       <div className="flex flex-1 overflow-hidden">
         <SideBar
           isOpen={sidebarOpen}
@@ -39,6 +49,10 @@ export default function EndoscopyLayout({ children }: { children: React.ReactNod
           activeZoneId={activeZoneId}
           editMode={editMode}
           onUpdateZone={handleUpdateZone}
+          animGroupOpacity={animGroupOpacity}
+          labelScale={labelScale}
+          showDangerIcon={showDangerIcon}
+          dangerBlinkOn={dangerBlinkOn}
         />
       </div>
     </div>

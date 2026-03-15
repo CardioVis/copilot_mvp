@@ -95,3 +95,26 @@ export function getStrokeDasharray(style: ZoneFillStyle, isActiveEdit: boolean):
   if (isActiveEdit && style === "hatch") return `${editIndicator.dashLength} ${editIndicator.gapLength}`;
   return "none";
 }
+
+/**
+ * Returns the stroke opacity for a polygon.
+ * For outline/dashed the stroke IS the visual, so it follows the zone opacity.
+ * For hatch the hatch lines handle their own opacity via the pattern; the
+ * edit-mode border stroke also follows opacity.
+ * For solid the border is decorative — keep it at 0.8.
+ */
+export function getStrokeOpacity(
+  style: ZoneFillStyle,
+  opacity: number,
+  isActiveEdit: boolean,
+): number {
+  switch (style) {
+    case "outline":
+    case "dashed":
+      return opacity;
+    case "hatch":
+      return isActiveEdit ? opacity : 1; // no stroke when not editing
+    default:
+      return 0.8;
+  }
+}

@@ -10,6 +10,10 @@ interface VideoViewportProps {
   activeZoneId: string | null;
   editMode: boolean;
   onUpdateZone: (zoneId: string, updates: Partial<Zone>) => void;
+  animGroupOpacity?: number;
+  labelScale: number;
+  showDangerIcon: boolean;
+  dangerBlinkOn: boolean;
 }
 
 export default function VideoViewport({
@@ -17,6 +21,10 @@ export default function VideoViewport({
   activeZoneId,
   editMode,
   onUpdateZone,
+  animGroupOpacity,
+  labelScale,
+  showDangerIcon,
+  dangerBlinkOn,
 }: VideoViewportProps) {
   const mainRef = useRef<HTMLElement>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
@@ -50,6 +58,10 @@ export default function VideoViewport({
         activeZoneId={activeZoneId}
         editMode={editMode}
         onUpdateZone={onUpdateZone}
+        animGroupOpacity={animGroupOpacity}
+        labelScale={labelScale}
+        showDangerIcon={showDangerIcon}
+        dangerBlinkOn={dangerBlinkOn}
       />
       </div>
     </main>

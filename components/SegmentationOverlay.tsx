@@ -10,6 +10,7 @@ import {
   getStroke,
   getStrokeWidth,
   getStrokeDasharray,
+  getStrokeOpacity,
 } from "@/lib/zoneStyles";
 
 interface SegmentationOverlayProps {
@@ -17,6 +18,10 @@ interface SegmentationOverlayProps {
   activeZoneId: string | null;
   editMode: boolean;
   onUpdateZone: (zoneId: string, updates: Partial<Zone>) => void;
+  animGroupOpacity?: number;
+  labelScale: number;
+  showDangerIcon: boolean;
+  dangerBlinkOn: boolean;
 }
 
 export default function SegmentationOverlay({
@@ -24,6 +29,10 @@ export default function SegmentationOverlay({
   activeZoneId,
   editMode,
   onUpdateZone,
+  animGroupOpacity,
+  labelScale,
+  showDangerIcon,
+  dangerBlinkOn,
 }: SegmentationOverlayProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [dragging, setDragging] = useState<{
@@ -221,8 +230,9 @@ export default function SegmentationOverlay({
                   fillOpacity={getFillOpacity(style, zone.opacity)}
                   stroke={getStroke(style, zone.color, isActiveEdit)}
                   strokeWidth={getStrokeWidth(style, isActiveEdit)}
-                  strokeOpacity={0.8}
+                  strokeOpacity={getStrokeOpacity(style, zone.opacity, isActiveEdit)}
                   strokeDasharray={getStrokeDasharray(style, isActiveEdit)}
+                  {...(animGroupOpacity !== undefined ? { opacity: animGroupOpacity } : {})}
                 />
               ) : (
                 <line
@@ -233,6 +243,7 @@ export default function SegmentationOverlay({
                   stroke={zone.color}
                   strokeWidth={2}
                   strokeOpacity={0.8}
+                  {...(animGroupOpacity !== undefined ? { opacity: animGroupOpacity } : {})}
                 />
               )}
 
@@ -277,6 +288,11 @@ export default function SegmentationOverlay({
 
                 const isDraggingLabel = dragging?.zoneId === zone.id && dragging?.isLabel;
 
+                const iconCenterX = labelX - boxW / 2 - 12;
+                const scaleTransform = labelScale !== 1
+                  ? `translate(${labelX}, ${labelY}) scale(${labelScale}) translate(${-labelX}, ${-labelY})`
+                  : undefined;
+
                 return (
                   <g 
                     style={{ 
@@ -286,28 +302,49 @@ export default function SegmentationOverlay({
                     }}
                     onPointerDown={(e) => editMode && handleLabelDown(e, zone.id)}
                   >
-                    <rect
-                      x={labelX - boxW / 2}
-                      y={labelY - boxH / 2}
-                      width={boxW}
-                      height={boxH}
-                      rx={4}
-                      fill="rgba(0,0,0,0.75)"
-                      stroke="black"
-                      strokeWidth={1.5}
-                    />
-                    <text
-                      x={labelX}
-                      y={labelY + textYOffset}
-                      textAnchor="middle"
-                      dominantBaseline="middle"
-                      fill="white"
-                      fontSize={12}
-                      fontWeight="bold"
-                      style={{ pointerEvents: "none" }}
-                    >
-                      {zone.name}
-                    </text>
+                    <g transform={scaleTransform}>
+                      {/* Danger triangle */}
+                      {showDangerIcon && (
+                        <g
+                          transform={`translate(${iconCenterX}, ${labelY})`}
+                          opacity={dangerBlinkOn ? 1 : 0}
+                          style={{ pointerEvents: "none" }}
+                        >
+                          <polygon points="0,-8 7,5 -7,5" fill="#facc15" stroke="#92400e" strokeWidth={1} />
+                          <text
+                            x={0}
+                            y={2}
+                            textAnchor="middle"
+                            dominantBaseline="middle"
+                            fill="#1c1917"
+                            fontSize={7}
+                            fontWeight="bold"
+                          >!</text>
+                        </g>
+                      )}
+                      <rect
+                        x={labelX - boxW / 2}
+                        y={labelY - boxH / 2}
+                        width={boxW}
+                        height={boxH}
+                        rx={4}
+                        fill="rgba(0,0,0,0.75)"
+                        stroke="black"
+                        strokeWidth={1.5}
+                      />
+                      <text
+                        x={labelX}
+                        y={labelY + textYOffset}
+                        textAnchor="middle"
+                        dominantBaseline="middle"
+                        fill="white"
+                        fontSize={12}
+                        fontWeight="bold"
+                        style={{ pointerEvents: "none" }}
+                      >
+                        {zone.name}
+                      </text>
+                    </g>
                   </g>
                 );
               })()}
