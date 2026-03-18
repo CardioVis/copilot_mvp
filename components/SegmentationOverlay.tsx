@@ -5,6 +5,7 @@ import { Point, Zone, SafeZone } from "@/lib/types";
 import {
   hatch,
   safeZoneLine,
+  safeZoneArea,
   getHatchOpacity,
   getFill,
   getFillOpacity,
@@ -442,17 +443,30 @@ export default function SegmentationOverlay({
 
           return (
             <g key={sz.id}>
-              {/* Area: thick stroke around the polyline */}
-              <polyline
-                points={ptStr}
-                fill="none"
-                stroke={sz.areaColor}
-                strokeWidth={sz.areaWidth}
-                strokeOpacity={sz.areaOpacity}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                {...(animGroupOpacity !== undefined ? { opacity: animGroupOpacity } : {})}
-              />
+              {/* Area: gradient bands from outer (warning) to inner (safe) */}
+              {(() => {
+                const bands = safeZoneArea.bands;
+                const outerColor = safeZoneArea.outerColor;
+                const innerColor = sz.areaColor;
+                return Array.from({ length: bands }, (_, i) => {
+                  const t = i / (bands - 1); // 0 = outermost, 1 = innermost
+                  const w = sz.areaWidth * (1 - t * 0.7); // outer is full width, inner shrinks
+                  const color = lerpColor(outerColor, innerColor, t);
+                  const opacity = sz.areaOpacity * (0.4 + 0.6 * t); // outer more transparent
+                  return (
+                    <polyline
+                      key={i}
+                      points={ptStr}
+                      fill="none"
+                      stroke={color}
+                      strokeWidth={w}
+                      strokeOpacity={opacity}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  );
+                });
+              })()}
               {/* Line: the actual path */}
               <polyline
                 points={ptStr}
@@ -463,7 +477,6 @@ export default function SegmentationOverlay({
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 {...(sz.lineStyle === "dashed" ? { strokeDasharray: `${safeZoneLine.dashLength} ${safeZoneLine.gapLength}` } : {})}
-                {...(animGroupOpacity !== undefined ? { opacity: animGroupOpacity } : {})}
               />
 
               {/* Label */}
@@ -633,4 +646,22 @@ function closestEdgePoint(from: XY, to: XY, polygon: XY[]): XY {
     }
   }
   return best;
+}
+
+/** Linearly interpolate between two hex colors. t=0 returns a, t=1 returns b. */
+function lerpColor(a: string, b: string, t: number): string {
+  const pa = parseHex(a), pb = parseHex(b);
+  const r = Math.round(pa.r + (pb.r - pa.r) * t);
+  const g = Math.round(pa.g + (pb.g - pa.g) * t);
+  const bl = Math.round(pa.b + (pb.b - pa.b) * t);
+  return `rgb(${r},${g},${bl})`;
+}
+
+function parseHex(hex: string) {
+  const h = hex.replace("#", "");
+  return {
+    r: parseInt(h.substring(0, 2), 16),
+    g: parseInt(h.substring(2, 4), 16),
+    b: parseInt(h.substring(4, 6), 16),
+  };
 }

@@ -525,8 +525,8 @@ export default function ZoneEditorPanel({
             <input
               type="range"
               min="8"
-              max="120"
-              step="4"
+              max="640"
+              step="8"
               value={activeSafeZone.areaWidth}
               onChange={(e) =>
                 updateSafeZone(activeSafeZone.id, { areaWidth: parseFloat(e.target.value) })

@@ -11,17 +11,21 @@ export const safeZoneLine = {
   /** Default line style */
   style: "solid" as const,
   /** Dash pattern when style is "dashed" */
-  dashLength: 24,
-  gapLength: 16,
+  dashLength: 16,
+  gapLength: 24,
 };
 
 export const safeZoneArea = {
-  /** Default area color */
+  /** Default area color (safe / inner) */
   color: "#22c55e",
+  /** Outer edge color (less safe) */
+  outerColor: "#facc15",
   /** Default area width — total thickness of the filled band around the line (px) */
   width: 48,
   /** Default area opacity */
   opacity: 0.18,
+  /** Number of gradient bands rendered concentrically */
+  bands: 4,
 };
 
 /* ── Hatch pattern config ── */
