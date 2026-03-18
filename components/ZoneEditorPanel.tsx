@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Zone, ZoneFillStyle } from "@/lib/types";
-import { serializeZones, deserializeZones } from "@/lib/zoneSerializer";
+import { Zone, SafeZone, ZoneFillStyle } from "@/lib/types";
+import { serializeZones, deserializeZones, serializeSafeZones, deserializeSafeZones } from "@/lib/zoneSerializer";
+import { safeZoneLine, safeZoneArea } from "@/lib/zoneStyles";
 
 const DEFAULT_SCRIPT_URL =
   "https://script.google.com/macros/s/AKfycbwsrp7iUZZN2UJaIRfyER9YNDqF2pIiHAPJtBq_fUQTTGt0a8LWO1RFTExwV-kI4uMyTA/exec";
@@ -26,18 +27,22 @@ const FILL_STYLES: { value: ZoneFillStyle; label: string }[] = [
 
 interface ZoneEditorPanelProps {
   zones: Zone[];
+  safeZones: SafeZone[];
   activeZoneId: string | null;
   editMode: boolean;
   onSetZones: (zones: Zone[]) => void;
+  onSetSafeZones: (safeZones: SafeZone[]) => void;
   onSetActiveZoneId: (id: string | null) => void;
   onSetEditMode: (mode: boolean) => void;
 }
 
 export default function ZoneEditorPanel({
   zones,
+  safeZones,
   activeZoneId,
   editMode,
   onSetZones,
+  onSetSafeZones,
   onSetActiveZoneId,
   onSetEditMode,
 }: ZoneEditorPanelProps) {
@@ -47,6 +52,7 @@ export default function ZoneEditorPanel({
   const didAutoLoad = useRef(false);
 
   const activeZone = zones.find((z) => z.id === activeZoneId);
+  const activeSafeZone = safeZones.find((z) => z.id === activeZoneId);
 
   // Auto-load zones from Drive on first mount
   useEffect(() => {
@@ -61,10 +67,13 @@ export default function ZoneEditorPanel({
         if (!res.ok) return;
         const text = await res.text();
         const parsed = deserializeZones(text);
-        if (parsed.length > 0) {
+        const parsedSafe = deserializeSafeZones(text);
+        if (parsed.length > 0 || parsedSafe.length > 0) {
           onSetZones(parsed);
-          onSetActiveZoneId(parsed[0].id);
-          setSyncStatus(`Auto-loaded ${parsed.length} zone(s)`);
+          onSetSafeZones(parsedSafe);
+          if (parsed.length > 0) onSetActiveZoneId(parsed[0].id);
+          else if (parsedSafe.length > 0) onSetActiveZoneId(parsedSafe[0].id);
+          setSyncStatus(`Auto-loaded ${parsed.length} zone(s), ${parsedSafe.length} safe zone(s)`);
         }
       } catch {
         // silent — auto-load is best-effort
@@ -95,6 +104,34 @@ export default function ZoneEditorPanel({
     onSetZones(zones.map((z) => (z.id === id ? { ...z, ...updates } : z)));
   };
 
+  const addSafeZone = () => {
+    const newSz: SafeZone = {
+      id: crypto.randomUUID(),
+      name: `Safe ${safeZones.length + 1}`,
+      points: [],
+      visible: true,
+      lineColor: safeZoneLine.color,
+      lineWidth: safeZoneLine.width,
+      lineOpacity: safeZoneLine.opacity,
+      lineStyle: safeZoneLine.style,
+      areaColor: safeZoneArea.color,
+      areaWidth: safeZoneArea.width,
+      areaOpacity: safeZoneArea.opacity,
+    };
+    onSetSafeZones([...safeZones, newSz]);
+    onSetActiveZoneId(newSz.id);
+    onSetEditMode(true);
+  };
+
+  const deleteSafeZone = (id: string) => {
+    onSetSafeZones(safeZones.filter((z) => z.id !== id));
+    if (activeZoneId === id) onSetActiveZoneId(null);
+  };
+
+  const updateSafeZone = (id: string, updates: Partial<SafeZone>) => {
+    onSetSafeZones(safeZones.map((z) => (z.id === id ? { ...z, ...updates } : z)));
+  };
+
   const readFromDrive = async () => {
     if (!scriptUrl.trim()) return;
     setIsLoading(true);
@@ -106,9 +143,12 @@ export default function ZoneEditorPanel({
       if (!res.ok) throw new Error(await res.text());
       const text = await res.text();
       const parsed = deserializeZones(text);
+      const parsedSafe = deserializeSafeZones(text);
       onSetZones(parsed);
-      setSyncStatus(`Loaded ${parsed.length} zone(s)`);
+      onSetSafeZones(parsedSafe);
+      setSyncStatus(`Loaded ${parsed.length} zone(s), ${parsedSafe.length} safe zone(s)`);
       if (parsed.length > 0) onSetActiveZoneId(parsed[0].id);
+      else if (parsedSafe.length > 0) onSetActiveZoneId(parsedSafe[0].id);
     } catch (err) {
       setSyncStatus(
         `Error: ${err instanceof Error ? err.message : "Unknown"}`
@@ -123,7 +163,8 @@ export default function ZoneEditorPanel({
     setIsLoading(true);
     setSyncStatus("Writing…");
     try {
-      const content = serializeZones(zones);
+      const parts = [serializeZones(zones), serializeSafeZones(safeZones)].filter(Boolean);
+      const content = parts.join("\n\n");
       const res = await fetch("/api/drive", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -141,7 +182,8 @@ export default function ZoneEditorPanel({
   };
 
   const exportToClipboard = () => {
-    navigator.clipboard.writeText(serializeZones(zones));
+    const parts = [serializeZones(zones), serializeSafeZones(safeZones)].filter(Boolean);
+    navigator.clipboard.writeText(parts.join("\n\n"));
     setSyncStatus("Copied to clipboard");
   };
 
@@ -149,9 +191,12 @@ export default function ZoneEditorPanel({
     try {
       const text = await navigator.clipboard.readText();
       const parsed = deserializeZones(text);
+      const parsedSafe = deserializeSafeZones(text);
       onSetZones(parsed);
-      setSyncStatus(`Imported ${parsed.length} zone(s)`);
+      onSetSafeZones(parsedSafe);
+      setSyncStatus(`Imported ${parsed.length} zone(s), ${parsedSafe.length} safe zone(s)`);
       if (parsed.length > 0) onSetActiveZoneId(parsed[0].id);
+      else if (parsedSafe.length > 0) onSetActiveZoneId(parsedSafe[0].id);
     } catch {
       setSyncStatus("Failed to read clipboard");
     }
@@ -306,6 +351,203 @@ export default function ZoneEditorPanel({
         </div>
       )}
 
+      {/* Safe Zones header */}
+      <div className="flex items-center justify-between border-t border-zinc-800 pt-3">
+        <h3 className="text-xs font-medium tracking-wider text-zinc-500">
+          Safe Zones
+        </h3>
+      </div>
+
+      {/* Safe zone list */}
+      <div className="space-y-1">
+        {safeZones.map((sz) => (
+          <div
+            key={sz.id}
+            onClick={() => onSetActiveZoneId(sz.id)}
+            className={`flex items-center gap-2 rounded px-2 py-1.5 text-xs cursor-pointer transition-colors ${
+              sz.id === activeZoneId
+                ? "bg-zinc-800 text-zinc-200"
+                : "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-300"
+            }`}
+          >
+            <span
+              className="inline-block h-3 w-0.5 rounded-full shrink-0"
+              style={{ backgroundColor: sz.lineColor, opacity: sz.lineOpacity }}
+            />
+            <span className="flex-1 truncate">{sz.name}</span>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                updateSafeZone(sz.id, { visible: !sz.visible });
+              }}
+              className={`shrink-0 text-[10px] font-mono leading-none transition-colors ${
+                sz.visible
+                  ? "text-zinc-400 hover:text-zinc-200"
+                  : "text-zinc-600 hover:text-zinc-400"
+              }`}
+              title={sz.visible ? "Hide" : "Show"}
+            >
+              {sz.visible ? "ON" : "OFF"}
+            </button>
+          </div>
+        ))}
+        <button
+          onClick={addSafeZone}
+          className="flex w-full items-center gap-1 rounded px-2 py-1.5 text-xs text-zinc-500 hover:bg-zinc-800/50 hover:text-zinc-400 transition-colors"
+        >
+          <span className="text-base leading-none">+</span> Add Safe Zone
+        </button>
+      </div>
+
+      {/* Active safe zone settings */}
+      {activeSafeZone && editMode && (
+        <div className="space-y-2 border-t border-zinc-800 pt-3">
+          <h4 className="text-xs font-medium text-zinc-500">Safe Zone Settings</h4>
+
+          <div>
+            <label className="text-[10px] uppercase text-zinc-600">Name</label>
+            <input
+              type="text"
+              value={activeSafeZone.name}
+              onChange={(e) =>
+                updateSafeZone(activeSafeZone.id, { name: e.target.value })
+              }
+              className="mt-0.5 w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-300 outline-none focus:border-emerald-500"
+            />
+          </div>
+
+          <div>
+            <label className="text-[10px] uppercase text-zinc-600">Line Color</label>
+            <div className="mt-0.5 flex gap-1">
+              {ZONE_COLORS.map((c) => (
+                <button
+                  key={c}
+                  onClick={() => updateSafeZone(activeSafeZone.id, { lineColor: c })}
+                  className={`h-5 w-5 rounded-sm border ${
+                    activeSafeZone.lineColor === c ? "border-white" : "border-zinc-700"
+                  }`}
+                  style={{ backgroundColor: c }}
+                />
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="text-[10px] uppercase text-zinc-600">
+              Line Opacity: {Math.round(activeSafeZone.lineOpacity * 100)}%
+            </label>
+            <input
+              type="range"
+              min="0.1"
+              max="1"
+              step="0.05"
+              value={activeSafeZone.lineOpacity}
+              onChange={(e) =>
+                updateSafeZone(activeSafeZone.id, { lineOpacity: parseFloat(e.target.value) })
+              }
+              className="mt-0.5 w-full accent-emerald-500"
+            />
+          </div>
+
+          <div>
+            <label className="text-[10px] uppercase text-zinc-600">Line Style</label>
+            <div className="mt-0.5 flex gap-1">
+              {(["solid", "dashed"] as const).map((s) => (
+                <button
+                  key={s}
+                  onClick={() => updateSafeZone(activeSafeZone.id, { lineStyle: s })}
+                  className={`flex-1 rounded border px-1 py-0.5 text-[10px] capitalize transition-colors ${
+                    activeSafeZone.lineStyle === s
+                      ? "border-emerald-500 bg-emerald-500/20 text-emerald-300"
+                      : "border-zinc-700 text-zinc-400 hover:border-zinc-600"
+                  }`}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="text-[10px] uppercase text-zinc-600">
+              Line Width: {activeSafeZone.lineWidth}px
+            </label>
+            <input
+              type="range"
+              min="1"
+              max="10"
+              step="1"
+              value={activeSafeZone.lineWidth}
+              onChange={(e) =>
+                updateSafeZone(activeSafeZone.id, { lineWidth: parseFloat(e.target.value) })
+              }
+              className="mt-0.5 w-full accent-emerald-500"
+            />
+          </div>
+
+          <div>
+            <label className="text-[10px] uppercase text-zinc-600">Area Color</label>
+            <div className="mt-0.5 flex gap-1">
+              {ZONE_COLORS.map((c) => (
+                <button
+                  key={c}
+                  onClick={() => updateSafeZone(activeSafeZone.id, { areaColor: c })}
+                  className={`h-5 w-5 rounded-sm border ${
+                    activeSafeZone.areaColor === c ? "border-white" : "border-zinc-700"
+                  }`}
+                  style={{ backgroundColor: c }}
+                />
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="text-[10px] uppercase text-zinc-600">
+              Area Opacity: {Math.round(activeSafeZone.areaOpacity * 100)}%
+            </label>
+            <input
+              type="range"
+              min="0.05"
+              max="0.8"
+              step="0.05"
+              value={activeSafeZone.areaOpacity}
+              onChange={(e) =>
+                updateSafeZone(activeSafeZone.id, { areaOpacity: parseFloat(e.target.value) })
+              }
+              className="mt-0.5 w-full accent-emerald-500"
+            />
+          </div>
+
+          <div>
+            <label className="text-[10px] uppercase text-zinc-600">
+              Area Width: {activeSafeZone.areaWidth}px
+            </label>
+            <input
+              type="range"
+              min="8"
+              max="120"
+              step="4"
+              value={activeSafeZone.areaWidth}
+              onChange={(e) =>
+                updateSafeZone(activeSafeZone.id, { areaWidth: parseFloat(e.target.value) })
+              }
+              className="mt-0.5 w-full accent-emerald-500"
+            />
+          </div>
+
+          <p className="text-[10px] text-zinc-600">
+            Click viewport to add points · Drag to move · Right-click to remove
+          </p>
+
+          <button
+            onClick={() => deleteSafeZone(activeSafeZone.id)}
+            className="w-full rounded border border-red-900/50 px-2 py-1 text-xs text-red-400 hover:bg-red-900/20 transition-colors"
+          >
+            Delete Safe Zone
+          </button>
+        </div>
+      )}
+
       {/* Google Drive sync */}
       <div className="space-y-2 border-t border-zinc-800 pt-3">
         <h4 className="text-xs font-medium text-zinc-500">Google Drive Sync</h4>
@@ -331,7 +573,7 @@ export default function ZoneEditorPanel({
           </button>
           <button
             onClick={writeToDrive}
-            disabled={isLoading || !scriptUrl.trim() || zones.length === 0}
+            disabled={isLoading || !scriptUrl.trim() || (zones.length === 0 && safeZones.length === 0)}
             className="flex-1 rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:bg-zinc-800 transition-colors disabled:opacity-40"
           >
             Write
@@ -341,7 +583,7 @@ export default function ZoneEditorPanel({
         <div className="flex gap-1">
           <button
             onClick={exportToClipboard}
-            disabled={zones.length === 0}
+            disabled={zones.length === 0 && safeZones.length === 0}
             className="flex-1 rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-400 hover:bg-zinc-800 transition-colors disabled:opacity-40"
           >
             Copy

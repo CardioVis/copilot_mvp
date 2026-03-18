@@ -16,3 +16,21 @@ export interface Zone {
   labelPos?: Point;
   accuracy?: number; // AI confidence percentage (0-100)
 }
+
+export type SafeZoneLineStyle = "solid" | "dashed";
+
+export interface SafeZone {
+  id: string;
+  name: string;
+  points: Point[]; // forms a polyline (open path, not closed)
+  visible: boolean;
+  lineColor: string;
+  lineWidth: number;
+  lineOpacity: number;
+  lineStyle: SafeZoneLineStyle;
+  areaColor: string;
+  areaWidth: number; // thickness of the filled region around the line
+  areaOpacity: number;
+  labelPos?: Point;
+  accuracy?: number;
+}

@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Point, Zone } from "@/lib/types";
+import { Point, Zone, SafeZone } from "@/lib/types";
 import {
   hatch,
+  safeZoneLine,
   getHatchOpacity,
   getFill,
   getFillOpacity,
@@ -15,9 +16,11 @@ import {
 
 interface SegmentationOverlayProps {
   zones: Zone[];
+  safeZones: SafeZone[];
   activeZoneId: string | null;
   editMode: boolean;
   onUpdateZone: (zoneId: string, updates: Partial<Zone>) => void;
+  onUpdateSafeZone: (zoneId: string, updates: Partial<SafeZone>) => void;
   animGroupOpacity?: number;
   labelScale: number;
   showDangerIcon: boolean;
@@ -26,9 +29,11 @@ interface SegmentationOverlayProps {
 
 export default function SegmentationOverlay({
   zones,
+  safeZones,
   activeZoneId,
   editMode,
   onUpdateZone,
+  onUpdateSafeZone,
   animGroupOpacity,
   labelScale,
   showDangerIcon,
@@ -97,18 +102,32 @@ export default function SegmentationOverlay({
       if (!dragging) return;
       const c = svgCoords(e);
       const n = norm(c.x, c.y);
+
+      // Try danger zone first, then safe zone
       const zone = zones.find((z) => z.id === dragging.zoneId);
-      if (!zone) return;
-      
-      if (dragging.isLabel) {
-        onUpdateZone(dragging.zoneId, { labelPos: n });
-      } else if (dragging.pointIndex !== undefined) {
-        const pts = [...zone.points];
-        pts[dragging.pointIndex] = n;
-        onUpdateZone(dragging.zoneId, { points: pts });
+      if (zone) {
+        if (dragging.isLabel) {
+          onUpdateZone(dragging.zoneId, { labelPos: n });
+        } else if (dragging.pointIndex !== undefined) {
+          const pts = [...zone.points];
+          pts[dragging.pointIndex] = n;
+          onUpdateZone(dragging.zoneId, { points: pts });
+        }
+        return;
+      }
+
+      const sz = safeZones.find((z) => z.id === dragging.zoneId);
+      if (sz) {
+        if (dragging.isLabel) {
+          onUpdateSafeZone(dragging.zoneId, { labelPos: n });
+        } else if (dragging.pointIndex !== undefined) {
+          const pts = [...sz.points];
+          pts[dragging.pointIndex] = n;
+          onUpdateSafeZone(dragging.zoneId, { points: pts });
+        }
       }
     },
-    [dragging, zones, svgCoords, norm, onUpdateZone]
+    [dragging, zones, safeZones, svgCoords, norm, onUpdateZone, onUpdateSafeZone]
   );
 
   const handlePointerUp = useCallback((e: React.PointerEvent) => {
@@ -119,19 +138,35 @@ export default function SegmentationOverlay({
   const handleSvgClick = useCallback(
     (e: React.MouseEvent) => {
       if (!editMode || !activeZoneId || dragging) return;
-      // Also ignore clicks when clicking slightly over a label that wasn't dragged
       if ((e.target as Element).tagName === "rect" || (e.target as Element).tagName === "text") return;
 
       const c = svgCoords(e);
       const n = norm(c.x, c.y);
+
+      // Try danger zone first
       const zone = zones.find((z) => z.id === activeZoneId);
-      if (!zone) return;
-      const pts = [...zone.points];
-      const idx = findInsertIndex(pts, n);
-      pts.splice(idx, 0, n);
-      onUpdateZone(activeZoneId, { points: pts });
+      if (zone) {
+        const pts = [...zone.points];
+        const idx = findInsertIndex(pts, n);
+        pts.splice(idx, 0, n);
+        onUpdateZone(activeZoneId, { points: pts });
+        return;
+      }
+
+      // Try safe zone — for safe zones, always append to end (line, not closed shape)
+      const sz = safeZones.find((z) => z.id === activeZoneId);
+      if (sz) {
+        const pts = [...sz.points];
+        if (pts.length < 2) {
+          pts.push(n);
+        } else {
+          const idx = findLineInsertIndex(pts, n);
+          pts.splice(idx, 0, n);
+        }
+        onUpdateSafeZone(activeZoneId, { points: pts });
+      }
     },
-    [editMode, activeZoneId, dragging, zones, svgCoords, norm, onUpdateZone]
+    [editMode, activeZoneId, dragging, zones, safeZones, svgCoords, norm, onUpdateZone, onUpdateSafeZone]
   );
 
   const handlePointContext = useCallback(
@@ -139,13 +174,16 @@ export default function SegmentationOverlay({
       e.preventDefault();
       e.stopPropagation();
       const zone = zones.find((z) => z.id === zoneId);
-      if (!zone) return;
-      onUpdateZone(
-        zoneId,
-        { points: zone.points.filter((_, i) => i !== idx) }
-      );
+      if (zone) {
+        onUpdateZone(zoneId, { points: zone.points.filter((_, i) => i !== idx) });
+        return;
+      }
+      const sz = safeZones.find((z) => z.id === zoneId);
+      if (sz) {
+        onUpdateSafeZone(zoneId, { points: sz.points.filter((_, i) => i !== idx) });
+      }
     },
-    [zones, onUpdateZone]
+    [zones, safeZones, onUpdateZone, onUpdateSafeZone]
   );
 
   const ready = dims.w > 0 && dims.h > 0;
@@ -369,6 +407,147 @@ export default function SegmentationOverlay({
             </g>
           );
         })}
+
+      {/* ── Safe zones ── */}
+      {ready &&
+        safeZones.filter((sz) => sz.visible !== false).map((sz) => {
+          const pxPts = sz.points.map(px);
+          const active = sz.id === activeZoneId;
+          const isActiveEdit = active && editMode;
+
+          if (sz.points.length === 0) return null;
+
+          if (sz.points.length === 1) {
+            if (isActiveEdit) {
+              const p = pxPts[0];
+              return (
+                <circle
+                  key={sz.id}
+                  cx={p.x}
+                  cy={p.y}
+                  r={6}
+                  fill="white"
+                  stroke={sz.lineColor}
+                  strokeWidth={2}
+                  style={{ cursor: "grab" }}
+                  onPointerDown={(e) => handlePointDown(e, sz.id, 0)}
+                  onContextMenu={(e) => handlePointContext(e, sz.id, 0)}
+                />
+              );
+            }
+            return null;
+          }
+
+          const ptStr = pxPts.map((p) => `${p.x},${p.y}`).join(" ");
+
+          return (
+            <g key={sz.id}>
+              {/* Area: thick stroke around the polyline */}
+              <polyline
+                points={ptStr}
+                fill="none"
+                stroke={sz.areaColor}
+                strokeWidth={sz.areaWidth}
+                strokeOpacity={sz.areaOpacity}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                {...(animGroupOpacity !== undefined ? { opacity: animGroupOpacity } : {})}
+              />
+              {/* Line: the actual path */}
+              <polyline
+                points={ptStr}
+                fill="none"
+                stroke={sz.lineColor}
+                strokeWidth={sz.lineWidth}
+                strokeOpacity={sz.lineOpacity}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                {...(sz.lineStyle === "dashed" ? { strokeDasharray: `${safeZoneLine.dashLength} ${safeZoneLine.gapLength}` } : {})}
+                {...(animGroupOpacity !== undefined ? { opacity: animGroupOpacity } : {})}
+              />
+
+              {/* Label */}
+              {sz.points.length >= 2 && (() => {
+                const midIdx = Math.floor(pxPts.length / 2);
+                const midPt = pxPts.length % 2 === 0
+                  ? { x: (pxPts[midIdx - 1].x + pxPts[midIdx].x) / 2, y: (pxPts[midIdx - 1].y + pxPts[midIdx].y) / 2 }
+                  : pxPts[midIdx];
+
+                let labelX = midPt.x;
+                let labelY = midPt.y - 24;
+                if (sz.labelPos) {
+                  const lblPx = px(sz.labelPos);
+                  labelX = lblPx.x;
+                  labelY = lblPx.y;
+                }
+
+                const padX = 6;
+                const padY = 3;
+                const textLen = sz.name.length * 6.5;
+                const boxW = textLen + padX * 2;
+                const boxH = 16 + padY * 2;
+
+                const isDraggingLabel = dragging?.zoneId === sz.id && dragging?.isLabel;
+                const scaleTransform = labelScale !== 1
+                  ? `translate(${labelX}, ${labelY}) scale(${labelScale}) translate(${-labelX}, ${-labelY})`
+                  : undefined;
+
+                return (
+                  <g
+                    style={{
+                      pointerEvents: editMode ? "auto" : "none",
+                      userSelect: "none",
+                      cursor: editMode ? (isDraggingLabel ? "grabbing" : "grab") : "default",
+                    }}
+                    onPointerDown={(e) => editMode && handleLabelDown(e, sz.id)}
+                  >
+                    <g transform={scaleTransform}>
+                      <rect
+                        x={labelX - boxW / 2}
+                        y={labelY - boxH / 2}
+                        width={boxW}
+                        height={boxH}
+                        rx={4}
+                        fill="rgba(0,0,0,0.75)"
+                        stroke={sz.lineColor}
+                        strokeWidth={1.5}
+                      />
+                      <text
+                        x={labelX}
+                        y={labelY + 1}
+                        textAnchor="middle"
+                        dominantBaseline="middle"
+                        fill="white"
+                        fontSize={12}
+                        fontWeight="bold"
+                        style={{ pointerEvents: "none" }}
+                      >
+                        {sz.name}
+                      </text>
+                    </g>
+                  </g>
+                );
+              })()}
+
+              {/* Handles */}
+              {isActiveEdit &&
+                pxPts.map((p, i) => (
+                  <circle
+                    key={i}
+                    cx={p.x}
+                    cy={p.y}
+                    r={6}
+                    fill="white"
+                    stroke={sz.lineColor}
+                    strokeWidth={2}
+                    style={{ cursor: "grab" }}
+                    onPointerDown={(e) => handlePointDown(e, sz.id, i)}
+                    onContextMenu={(e) => handlePointContext(e, sz.id, i)}
+                  />
+                ))}
+            </g>
+          );
+        })}
     </svg>
   );
 }
@@ -409,6 +588,26 @@ function segDist(p: Point, a: Point, b: Point): number {
 
 function hatchPatternId(zoneId: string): string {
   return `zone-hatch-${zoneId.replace(/[^a-zA-Z0-9_-]/g, "")}`;
+}
+
+/** For open polylines (safe zones): find the best segment to insert a new point into. */
+function findLineInsertIndex(points: Point[], pt: Point): number {
+  if (points.length < 2) return points.length;
+  let min = Infinity;
+  let idx = points.length; // default: append
+  for (let i = 0; i < points.length - 1; i++) {
+    const d = segDist(pt, points[i], points[i + 1]);
+    if (d < min) {
+      min = d;
+      idx = i + 1;
+    }
+  }
+  // Also check if appending to end or prepending is closer
+  const dEnd = Math.hypot(pt.x - points[points.length - 1].x, pt.y - points[points.length - 1].y);
+  const dStart = Math.hypot(pt.x - points[0].x, pt.y - points[0].y);
+  if (dEnd < min) return points.length;
+  if (dStart < min) return 0;
+  return idx;
 }
 
 type XY = { x: number; y: number };

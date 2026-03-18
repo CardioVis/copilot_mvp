@@ -3,13 +3,15 @@
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import SegmentationOverlay from "./SegmentationOverlay";
-import { Point, Zone } from "@/lib/types";
+import { Point, Zone, SafeZone } from "@/lib/types";
 
 interface VideoViewportProps {
   zones: Zone[];
+  safeZones: SafeZone[];
   activeZoneId: string | null;
   editMode: boolean;
   onUpdateZone: (zoneId: string, updates: Partial<Zone>) => void;
+  onUpdateSafeZone: (zoneId: string, updates: Partial<SafeZone>) => void;
   animGroupOpacity?: number;
   labelScale: number;
   showDangerIcon: boolean;
@@ -18,9 +20,11 @@ interface VideoViewportProps {
 
 export default function VideoViewport({
   zones,
+  safeZones,
   activeZoneId,
   editMode,
   onUpdateZone,
+  onUpdateSafeZone,
   animGroupOpacity,
   labelScale,
   showDangerIcon,
@@ -55,9 +59,11 @@ export default function VideoViewport({
       />
       <SegmentationOverlay
         zones={zones}
+        safeZones={safeZones}
         activeZoneId={activeZoneId}
         editMode={editMode}
         onUpdateZone={onUpdateZone}
+        onUpdateSafeZone={onUpdateSafeZone}
         animGroupOpacity={animGroupOpacity}
         labelScale={labelScale}
         showDangerIcon={showDangerIcon}

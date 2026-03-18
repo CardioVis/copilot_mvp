@@ -1,5 +1,29 @@
 import { ZoneFillStyle } from "./types";
 
+/* ── Safe-zone defaults ── */
+export const safeZoneLine = {
+  /** Default line color */
+  color: "#22c55e",
+  /** Default line width (px) */
+  width: 3,
+  /** Default line opacity */
+  opacity: 0.9,
+  /** Default line style */
+  style: "solid" as const,
+  /** Dash pattern when style is "dashed" */
+  dashLength: 24,
+  gapLength: 16,
+};
+
+export const safeZoneArea = {
+  /** Default area color */
+  color: "#22c55e",
+  /** Default area width — total thickness of the filled band around the line (px) */
+  width: 48,
+  /** Default area opacity */
+  opacity: 0.18,
+};
+
 /* ── Hatch pattern config ── */
 export const hatch = {
   /** Gap between hatch lines (px). Larger = more spacing. */

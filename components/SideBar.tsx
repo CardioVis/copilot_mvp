@@ -1,15 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { Zone } from "@/lib/types";
+import { Zone, SafeZone } from "@/lib/types";
 import ZoneEditorPanel from "./ZoneEditorPanel";
 
 interface SideBarProps {
   isOpen: boolean;
   zones: Zone[];
+  safeZones: SafeZone[];
   activeZoneId: string | null;
   editMode: boolean;
   onSetZones: (zones: Zone[]) => void;
+  onSetSafeZones: (safeZones: SafeZone[]) => void;
   onSetActiveZoneId: (id: string | null) => void;
   onSetEditMode: (mode: boolean) => void;
 }
@@ -17,9 +19,11 @@ interface SideBarProps {
 export default function SideBar({
   isOpen,
   zones,
+  safeZones,
   activeZoneId,
   editMode,
   onSetZones,
+  onSetSafeZones,
   onSetActiveZoneId,
   onSetEditMode,
 }: SideBarProps) {
@@ -39,6 +43,14 @@ export default function SideBar({
             <DangerZonesContent zones={zones} />
           </div>
         </div>
+        <div>
+          <h3 className="py-1 text-xs font-medium uppercase tracking-wider text-zinc-500">
+            Safe Zones
+          </h3>
+          <div className="mt-2">
+            <SafeZonesContent safeZones={safeZones} />
+          </div>
+        </div>
         <div className="border-t border-zinc-800 pt-4">
           <CollapsibleSection
             title="Dev tool"
@@ -47,9 +59,11 @@ export default function SideBar({
           >
             <ZoneEditorPanel
               zones={zones}
+              safeZones={safeZones}
               activeZoneId={activeZoneId}
               editMode={editMode}
               onSetZones={onSetZones}
+              onSetSafeZones={onSetSafeZones}
               onSetActiveZoneId={onSetActiveZoneId}
               onSetEditMode={onSetEditMode}
             />
@@ -107,6 +121,31 @@ function DangerZonesContent({ zones }: { zones: Zone[] }) {
                 {HARDCODED_ACCURACY}%
               </span>
             </div>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+function SafeZonesContent({ safeZones }: { safeZones: SafeZone[] }) {
+  return (
+    <div className="space-y-3">
+      {safeZones.length === 0 ? (
+        <p className="text-xs text-zinc-600">No safe zones found.</p>
+      ) : (
+        safeZones.map((sz) => (
+          <div key={sz.id}>
+            <div className="flex items-center gap-2">
+              <span
+                className="inline-block h-3 w-0.5 rounded-full shrink-0"
+                style={{ backgroundColor: sz.lineColor, opacity: sz.lineOpacity }}
+              />
+              <p className="text-sm font-medium text-white">{sz.name}</p>
+            </div>
+            <p className="mt-0.5 text-[10px] text-zinc-500">
+              {sz.points.length} point{sz.points.length !== 1 ? "s" : ""}
+            </p>
           </div>
         ))
       )}
