@@ -123,7 +123,7 @@ export default function ImageGallery() {
     try {
       const data = await fetch("/api/images").then((r) => r.json());
       setImages(data.images ?? []);
-      setFolderName("public/");
+      setFolderName("public/frames/");
     } catch {
       setImages([]);
     } finally {
@@ -160,8 +160,14 @@ export default function ImageGallery() {
       const newImages: ImageEntry[] = [];
       let labelsHandle: FileSystemFileHandle | null = null;
       let boundaryHandle: FileSystemFileHandle | null = null;
+      let framesHandle: FileSystemDirectoryHandle | null = null;
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       for await (const [name, handle] of (dirHandle as any).entries()) {
+        if (handle.kind === "directory" && name === "frames") {
+          framesHandle = handle;
+          continue;
+        }
         if (handle.kind !== "file") continue;
         if (name === "labels.json") {
           labelsHandle = handle;
@@ -171,6 +177,13 @@ export default function ImageGallery() {
           boundaryHandle = handle;
           continue;
         }
+      }
+
+      // Read images from the frames subfolder
+      const imageSource = framesHandle ?? dirHandle;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      for await (const [name, handle] of (imageSource as any).entries()) {
+        if (handle.kind !== "file") continue;
         const ext = name.split(".").pop()?.toLowerCase() ?? "";
         if (!IMAGE_EXTENSIONS.has(ext)) continue;
         const file = await handle.getFile();
@@ -178,6 +191,7 @@ export default function ImageGallery() {
         objectUrlsRef.current.push(url);
         newImages.push({ name, src: url, isObjectUrl: true });
       }
+
       newImages.sort((a, b) => a.name.localeCompare(b.name));
       setImages(newImages);
       setFolderName(dirHandle.name + "/");

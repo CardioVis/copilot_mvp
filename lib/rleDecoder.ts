@@ -91,7 +91,7 @@ const EXTRA_COLORS: LabelColor[] = [
   { r: 255, g: 100, b: 200 },
 ];
 
-function getLabelColor(label: string, index: number): LabelColor {
+export function getLabelColor(label: string, index: number): LabelColor {
   return KNOWN_COLORS[label] ?? EXTRA_COLORS[index % EXTRA_COLORS.length];
 }
 

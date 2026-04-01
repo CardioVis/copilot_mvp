@@ -5,6 +5,7 @@ import TaskBar, { AppTab } from "@/components/TaskBar";
 import SideBar from "@/components/SideBar";
 import VideoViewport from "@/components/VideoViewport";
 import ImageGallery from "@/components/ImageGallery";
+import VideoPlayerTab from "@/components/VideoPlayerTab";
 import { Point, Zone, SafeZone } from "@/lib/types";
 import { useZoneAnimation } from "@/hooks/useZoneAnimation";
 
@@ -78,8 +79,10 @@ export default function EndoscopyLayout({ children }: { children: React.ReactNod
               dangerBlinkOn={dangerBlinkOn}
             />
           </>
-        ) : (
+        ) : activeTab === "gallery" ? (
           <ImageGallery />
+        ) : (
+          <VideoPlayerTab />
         )}
       </div>
     </div>

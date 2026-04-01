@@ -1,6 +1,6 @@
 "use client";
 
-export type AppTab = "endoscopy" | "gallery";
+export type AppTab = "endoscopy" | "gallery" | "video";
 
 interface TaskBarProps {
     isAnimating: boolean;
@@ -12,6 +12,7 @@ interface TaskBarProps {
 const TABS: { id: AppTab; label: string }[] = [
     { id: "endoscopy", label: "Endoscopy" },
     { id: "gallery", label: "Image Gallery" },
+    { id: "video", label: "Video Player" },
 ];
 
 export default function TaskBar({ isAnimating, onToggleAnimation, activeTab, onTabChange }: TaskBarProps) {

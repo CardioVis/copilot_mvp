@@ -14,6 +14,7 @@ interface SideBarProps {
   onSetSafeZones: (safeZones: SafeZone[]) => void;
   onSetActiveZoneId: (id: string | null) => void;
   onSetEditMode: (mode: boolean) => void;
+  showDevTool?: boolean;
 }
 
 export default function SideBar({
@@ -26,6 +27,7 @@ export default function SideBar({
   onSetSafeZones,
   onSetActiveZoneId,
   onSetEditMode,
+  showDevTool = true,
 }: SideBarProps) {
   if (!isOpen) return null;
 
@@ -51,24 +53,26 @@ export default function SideBar({
             <SafeZonesContent safeZones={safeZones} />
           </div>
         </div>
-        <div className="border-t border-zinc-800 pt-4">
-          <CollapsibleSection
-            title="Dev tool"
-            isOpen={editorOpen}
-            onToggle={() => setEditorOpen((v) => !v)}
-          >
-            <ZoneEditorPanel
-              zones={zones}
-              safeZones={safeZones}
-              activeZoneId={activeZoneId}
-              editMode={editMode}
-              onSetZones={onSetZones}
-              onSetSafeZones={onSetSafeZones}
-              onSetActiveZoneId={onSetActiveZoneId}
-              onSetEditMode={onSetEditMode}
-            />
-          </CollapsibleSection>
-        </div>
+        {showDevTool && (
+          <div className="border-t border-zinc-800 pt-4">
+            <CollapsibleSection
+              title="Dev tool"
+              isOpen={editorOpen}
+              onToggle={() => setEditorOpen((v) => !v)}
+            >
+              <ZoneEditorPanel
+                zones={zones}
+                safeZones={safeZones}
+                activeZoneId={activeZoneId}
+                editMode={editMode}
+                onSetZones={onSetZones}
+                onSetSafeZones={onSetSafeZones}
+                onSetActiveZoneId={onSetActiveZoneId}
+                onSetEditMode={onSetEditMode}
+              />
+            </CollapsibleSection>
+          </div>
+        )}
       </div>
     </aside>
   );
