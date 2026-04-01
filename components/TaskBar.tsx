@@ -1,18 +1,42 @@
 "use client";
 
+export type AppTab = "endoscopy" | "gallery";
+
 interface TaskBarProps {
     isAnimating: boolean;
     onToggleAnimation: () => void;
+    activeTab: AppTab;
+    onTabChange: (tab: AppTab) => void;
 }
 
-export default function TaskBar({ isAnimating, onToggleAnimation }: TaskBarProps) {
+const TABS: { id: AppTab; label: string }[] = [
+    { id: "endoscopy", label: "Endoscopy" },
+    { id: "gallery", label: "Image Gallery" },
+];
+
+export default function TaskBar({ isAnimating, onToggleAnimation, activeTab, onTabChange }: TaskBarProps) {
     return (
         <header className="flex h-12 items-center justify-between border-b border-zinc-800 bg-zinc-950 px-4">
-            {/* Left section */}
-            <div className="flex items-center gap-3">
+            {/* Left section: logo + tabs */}
+            <div className="flex items-center gap-6">
                 <div className="flex items-center gap-2 font-semibold">
                     CARDIOVIS
                 </div>
+                <nav className="flex items-center gap-1">
+                    {TABS.map((tab) => (
+                        <button
+                            key={tab.id}
+                            onClick={() => onTabChange(tab.id)}
+                            className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+                                activeTab === tab.id
+                                    ? "bg-zinc-700 text-zinc-100"
+                                    : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800"
+                            }`}
+                        >
+                            {tab.label}
+                        </button>
+                    ))}
+                </nav>
             </div>
 
             {/* Right section */}
