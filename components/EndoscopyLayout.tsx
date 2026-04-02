@@ -6,14 +6,14 @@ import SideBar from "@/components/SideBar";
 import VideoViewport from "@/components/VideoViewport";
 import ImageGallery from "@/components/ImageGallery";
 import VideoPlayerTab from "@/components/VideoPlayerTab";
-import { Point, Zone, SafeZone } from "@/lib/types";
+import { Point, Zone, SafeMargin } from "@/lib/types";
 import { useZoneAnimation } from "@/hooks/useZoneAnimation";
 
 export default function EndoscopyLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeTab, setActiveTab] = useState<AppTab>("endoscopy");
   const [zones, setZones] = useState<Zone[]>([]);
-  const [safeZones, setSafeZones] = useState<SafeZone[]>([]);
+  const [safeZones, setSafeZones] = useState<SafeMargin[]>([]);
   const [activeZoneId, setActiveZoneId] = useState<string | null>(null);
   const [editMode, setEditMode] = useState(false);
 
@@ -36,7 +36,7 @@ export default function EndoscopyLayout({ children }: { children: React.ReactNod
   );
 
   const handleUpdateSafeZone = useCallback(
-    (zoneId: string, updates: Partial<SafeZone>) => {
+    (zoneId: string, updates: Partial<SafeMargin>) => {
       setSafeZones((prev) =>
         prev.map((z) => (z.id === zoneId ? { ...z, ...updates } : z))
       );

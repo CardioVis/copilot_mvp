@@ -11,7 +11,8 @@ import {
   SegmentationTag,
 } from "@/lib/rleDecoder";
 import SideBar from "@/components/SideBar";
-import { Zone, SafeZone } from "@/lib/types";
+import { Zone, SafeMargin } from "@/lib/types";
+import { BoundaryAnimationManager, createClassifiedZone } from "@/lib/BoundaryAnimationManager";
 
 interface FrameLabels {
   /** frame number extracted from image name */
@@ -47,8 +48,9 @@ export default function VideoPlayerTab() {
   const objectUrlRef = useRef<string | null>(null);
   const labelsCanvasRef = useRef<HTMLCanvasElement>(null);
   const lastLabelFrameIndexRef = useRef<number>(-1);
+  const animManagerRef = useRef(new BoundaryAnimationManager());
 
-  const [showLabels, setShowLabels] = useState(true);
+  const [showLabels, setShowLabels] = useState(false);
   const [frameRleLabels, setFrameRleLabels] = useState<FrameRleLabels[]>([]);
 
   // Derive Zone[] from all frame labels for SideBar
@@ -61,18 +63,10 @@ export default function VideoPlayerTab() {
       }
     }
     const total = frameLabels.length;
-    const entries = Array.from(countMap.entries()).map(([label, count], idx) => {
-      const c = getLabelColor(label, idx) as LabelColor;
-      return {
-        id: label,
-        name: label,
-        color: `rgb(${c.r},${c.g},${c.b})`,
-        opacity: 1,
-        points: [],
-        visible: true,
-        fillStyle: "solid" as const,
-        accuracy: Math.round((count / total) * 100),
-      };
+    const entries = Array.from(countMap.entries()).map(([label, count]) => {
+      const zone = createClassifiedZone(label);
+      zone.accuracy = Math.round((count / total) * 100);
+      return zone;
     });
     entries.sort((a, b) => (b.accuracy ?? 0) - (a.accuracy ?? 0));
     return entries;
@@ -293,10 +287,15 @@ export default function VideoPlayerTab() {
     if (!zones || zones.length === 0) {
       const ctx = canvas.getContext("2d");
       ctx?.clearRect(0, 0, canvas.width, canvas.height);
+      animManagerRef.current.update(new Set(), video.currentTime);
       return;
     }
 
-    renderBoundaryOverlay(canvas, zones, dimensions.width || 1920, dimensions.height || 1080);
+    // Feed the animation manager and get per-zone render hints
+    const visibleLabels = new Set(zones.map((z) => z.label));
+    animManagerRef.current.update(visibleLabels, video.currentTime);
+
+    renderBoundaryOverlay(canvas, zones, dimensions.width || 1920, dimensions.height || 1080, animManagerRef.current);
   }, [showOverlay, getZonesForTime, dimensions, fps, frameLabels]);
 
   // Render RLE segmentation labels on the labels canvas
@@ -467,7 +466,7 @@ export default function VideoPlayerTab() {
         <SideBar
           isOpen
           zones={detectedZones.filter((z) => currentZoneNames.has(z.id))}
-          safeZones={[] as SafeZone[]}
+          safeZones={[] as SafeMargin[]}
           activeZoneId={null}
           editMode={false}
           onSetZones={() => {}}
@@ -578,6 +577,7 @@ export default function VideoPlayerTab() {
                     videoRef.current.currentTime = t;
                   }
                   setCurrentTime(t);
+                  animManagerRef.current.reset();
                 }}
                 className="flex-1 h-1 accent-zinc-400"
               />

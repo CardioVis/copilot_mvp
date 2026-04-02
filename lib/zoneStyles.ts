@@ -59,7 +59,7 @@ export const dashed = {
   /** Length of each dash (px). */
   dashLength: 24,
   /** Length of each gap (px). */
-  gapLength: 16,
+  gapLength: 8,
   /** Border stroke width (px). */
   strokeWidth: 8,
 };

@@ -19,7 +19,8 @@ export interface Zone {
 
 export type SafeZoneLineStyle = "solid" | "dashed";
 
-export interface SafeZone {
+/** Safety-margin corridor (open polyline + filled area). */
+export interface SafeMargin {
   id: string;
   name: string;
   points: Point[]; // forms a polyline (open path, not closed)
@@ -33,4 +34,38 @@ export interface SafeZone {
   areaOpacity: number;
   labelPos?: Point;
   accuracy?: number;
+}
+
+// ── Zone subclasses ───────────────────────────────────────────────────────────
+
+/** A polygon zone considered anatomically safe (defaults to green). */
+export class SafeZone implements Zone {
+  color = "#22c55e";
+  opacity = 1;
+  points: Point[] = [];
+  visible = true;
+  fillStyle: ZoneFillStyle = "dashed";
+  labelPos?: Point;
+  accuracy?: number;
+
+  constructor(
+    public id: string,
+    public name: string,
+  ) {}
+}
+
+/** A polygon zone considered anatomically dangerous (defaults to red). */
+export class DangerZone implements Zone {
+  color = "#ef4444";
+  opacity = 1;
+  points: Point[] = [];
+  visible = true;
+  fillStyle: ZoneFillStyle = "dashed";
+  labelPos?: Point;
+  accuracy?: number;
+
+  constructor(
+    public id: string,
+    public name: string,
+  ) {}
 }

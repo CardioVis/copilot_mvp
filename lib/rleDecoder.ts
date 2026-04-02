@@ -5,6 +5,31 @@
  *   then bit-packed RLE of RGBA pixel data.
  *  Alpha channel (every 4th value) indicates mask foreground.
  */
+import {
+  boundaryLine,
+  boundaryFill,
+  overlayLabel,
+  segmentationMask,
+} from "./overlayConfig";
+import type { ZoneRenderHint } from "./BoundaryAnimationManager";
+import { classifyZone, BoundaryAnimationManager } from "./BoundaryAnimationManager";
+import { SafeZone, DangerZone } from "./types";
+
+/** Parse a CSS hex color string into an RGB triple. */
+function hexToRgb(hex: string): LabelColor {
+  const n = parseInt(hex.replace("#", ""), 16);
+  return { r: (n >> 16) & 0xff, g: (n >> 8) & 0xff, b: n & 0xff };
+}
+
+// Derive boundary colors directly from the class defaults so any change there
+// is automatically reflected here.
+const _safe = new SafeZone("", "");
+const _danger = new DangerZone("", "");
+const CLASSIFIED_COLORS: Record<string, LabelColor> = {
+  danger:  hexToRgb(_danger.color),
+  safe:    hexToRgb(_safe.color),
+  unknown: { r: 180, g: 100, b: 255 },
+};
 
 export const MASK_WIDTH = 1920;
 export const MASK_HEIGHT = 1080;
@@ -116,7 +141,7 @@ export function renderSegmentationOverlay(
   tags: SegmentationTag[],
   width = MASK_WIDTH,
   height = MASK_HEIGHT,
-  opacity = 0.45,
+  opacity = segmentationMask.opacity,
 ): LabelInfo[] {
   canvas.width = width;
   canvas.height = height;
@@ -195,32 +220,35 @@ export function renderSegmentationOverlay(
   }
 
   // Draw label badges
-  const fontSize = Math.max(14, Math.round(width / 110));
+  const fontSize =
+    overlayLabel.fontSize > 0
+      ? overlayLabel.fontSize
+      : Math.max(overlayLabel.minFontSize, Math.round(width / overlayLabel.autoScaleDivisor));
   ctx.font = `bold ${fontSize}px system-ui, sans-serif`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
 
   for (const li of labels) {
     const m = ctx.measureText(li.label);
-    const px = 8;
-    const py = 5;
-    const bw = m.width + px * 2;
-    const bh = fontSize + py * 2;
+    const bw = m.width + overlayLabel.paddingX * 2;
+    const bh = fontSize + overlayLabel.paddingY * 2;
     const x = li.cx;
     const y = li.cy;
 
-    ctx.fillStyle = "rgba(0,0,0,0.75)";
+    ctx.fillStyle = `rgba(0,0,0,${overlayLabel.backgroundOpacity})`;
     ctx.beginPath();
-    ctx.roundRect(x - bw / 2, y - bh / 2, bw, bh, 4);
+    ctx.roundRect(x - bw / 2, y - bh / 2, bw, bh, overlayLabel.borderRadius);
     ctx.fill();
 
-    ctx.strokeStyle = `rgb(${li.color.r},${li.color.g},${li.color.b})`;
-    ctx.lineWidth = 1.5;
+    // No visible border: make stroke transparent
+    ctx.strokeStyle = `rgba(0,0,0,0)`;
+    ctx.lineWidth = overlayLabel.borderWidth;
     ctx.beginPath();
-    ctx.roundRect(x - bw / 2, y - bh / 2, bw, bh, 4);
+    ctx.roundRect(x - bw / 2, y - bh / 2, bw, bh, overlayLabel.borderRadius);
     ctx.stroke();
 
-    ctx.fillStyle = `rgb(${li.color.r},${li.color.g},${li.color.b})`;
+    // White label text for better contrast
+    ctx.fillStyle = `rgb(255,255,255)`;
     ctx.fillText(li.label, x, y);
   }
 
@@ -249,11 +277,21 @@ function normalizePolygons(
   return points as { x: number; y: number }[][];
 }
 
+/** Returns the boundary stroke/fill color for a zone label based on its category. */
+function getBoundaryColor(label: string): LabelColor {
+  return CLASSIFIED_COLORS[classifyZone(label)];
+}
+
+/**
+ * @param animManager Optional BoundaryAnimationManager that provides per-label
+ *   render hints (opacity, scale, etc.) and smoothed label positions.
+ */
 export function renderBoundaryOverlay(
   canvas: HTMLCanvasElement,
   zones: BoundaryZone[],
   width = MASK_WIDTH,
   height = MASK_HEIGHT,
+  animManager?: BoundaryAnimationManager,
 ): void {
   canvas.width = width;
   canvas.height = height;
@@ -267,11 +305,20 @@ export function renderBoundaryOverlay(
     if (!labelIndex.has(z.label)) labelIndex.set(z.label, idx++);
   }
 
-  const lineWidth = Math.max(2, Math.round(width / 600));
+  const lineWidth =
+    boundaryLine.lineWidth > 0
+      ? boundaryLine.lineWidth
+      : Math.max(boundaryLine.minWidth, Math.round(width / boundaryLine.autoScaleDivisor));
+
+  const lineDash =
+    boundaryLine.style === "dashed"
+      ? [boundaryLine.dashLength, boundaryLine.gapLength]
+      : [];
 
   for (const zone of zones) {
     const polygons = normalizePolygons(zone.points);
-    const color = getLabelColor(zone.label, labelIndex.get(zone.label)!);
+    const color = getBoundaryColor(zone.label);
+    const zoneAlpha = animManager?.getHint(zone.label)?.opacity ?? 1;
 
     for (const poly of polygons) {
       if (poly.length < 2) continue;
@@ -283,49 +330,72 @@ export function renderBoundaryOverlay(
       }
       ctx.closePath();
 
-      ctx.fillStyle = `rgba(${color.r},${color.g},${color.b},0.12)`;
+      ctx.fillStyle = `rgba(${color.r},${color.g},${color.b},${boundaryFill.opacity * zoneAlpha})`;
       ctx.fill();
 
-      ctx.strokeStyle = `rgb(${color.r},${color.g},${color.b})`;
+      ctx.setLineDash(lineDash);
+      ctx.strokeStyle = `rgba(${color.r},${color.g},${color.b},${boundaryLine.opacity * zoneAlpha})`;
       ctx.lineWidth = lineWidth;
       ctx.stroke();
+      ctx.setLineDash([]);
     }
   }
 
   // Labels at combined centroid of all polygons per zone
-  const fontSize = Math.max(14, Math.round(width / 110));
-  ctx.font = `bold ${fontSize}px system-ui, sans-serif`;
+  const fontSize =
+    overlayLabel.fontSize > 0
+      ? overlayLabel.fontSize
+      : Math.max(overlayLabel.minFontSize, Math.round(width / overlayLabel.autoScaleDivisor));
+  ctx.font = `${fontSize}px system-ui, sans-serif`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
 
   for (const zone of zones) {
     const polygons = normalizePolygons(zone.points);
-    const color = getLabelColor(zone.label, labelIndex.get(zone.label)!);
+    const color = getBoundaryColor(zone.label);
+    const hint = animManager?.getHint(zone.label);
+    const labelAlpha = hint?.labelOpacity ?? 1;
+    const scale = hint?.labelScale ?? 1;
+    const offY = hint?.labelOffsetY ?? 0;
     let cx = 0, cy = 0, total = 0;
     for (const poly of polygons) {
       for (const p of poly) { cx += p.x; cy += p.y; total++; }
     }
     if (total < 3) continue;
-    cx = (cx / total) * (width - 1);
-    cy = (cy / total) * (height - 1);
+    // Raw centroid in canvas coordinates
+    const rawX = (cx / total) * (width - 1);
+    const rawY = (cy / total) * (height - 1) + offY;
+
+    // Smooth the label position through the manager
+    const smoothed = animManager
+      ? animManager.smoothCentroid(zone.label, rawX, rawY)
+      : { x: rawX, y: rawY };
+
+    // Apply scale transform around the smoothed label centre
+    ctx.save();
+    ctx.translate(smoothed.x, smoothed.y);
+    ctx.scale(scale, scale);
 
     const m = ctx.measureText(zone.label);
-    const px = 8, py = 5;
-    const bw = m.width + px * 2;
-    const bh = fontSize + py * 2;
+    const bw = m.width + overlayLabel.paddingX * 2;
+    const bh = fontSize + overlayLabel.paddingY * 2;
 
-    ctx.fillStyle = "rgba(0,0,0,0.75)";
+    ctx.fillStyle = `rgba(0,0,0,${overlayLabel.backgroundOpacity * labelAlpha})`;
     ctx.beginPath();
-    ctx.roundRect(cx - bw / 2, cy - bh / 2, bw, bh, 4);
+    ctx.roundRect(-bw / 2, -bh / 2, bw, bh, overlayLabel.borderRadius);
     ctx.fill();
 
-    ctx.strokeStyle = `rgb(${color.r},${color.g},${color.b})`;
-    ctx.lineWidth = 1.5;
+    // No visible border: make stroke transparent
+    ctx.strokeStyle = `rgba(0,0,0,0)`;
+    ctx.lineWidth = overlayLabel.borderWidth;
     ctx.beginPath();
-    ctx.roundRect(cx - bw / 2, cy - bh / 2, bw, bh, 4);
+    ctx.roundRect(-bw / 2, -bh / 2, bw, bh, overlayLabel.borderRadius);
     ctx.stroke();
 
-    ctx.fillStyle = `rgb(${color.r},${color.g},${color.b})`;
-    ctx.fillText(zone.label, cx, cy);
+    // White label text (respect label alpha)
+    ctx.fillStyle = `rgba(255,255,255,${labelAlpha})`;
+    ctx.fillText(zone.label, 0, 0);
+
+    ctx.restore();
   }
 }

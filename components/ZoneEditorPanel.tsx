@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Zone, SafeZone, ZoneFillStyle } from "@/lib/types";
+import { Zone, SafeMargin, ZoneFillStyle } from "@/lib/types";
 import { serializeZones, deserializeZones, serializeSafeZones, deserializeSafeZones } from "@/lib/zoneSerializer";
 import { safeZoneLine, safeZoneArea } from "@/lib/zoneStyles";
 
@@ -27,11 +27,11 @@ const FILL_STYLES: { value: ZoneFillStyle; label: string }[] = [
 
 interface ZoneEditorPanelProps {
   zones: Zone[];
-  safeZones: SafeZone[];
+  safeZones: SafeMargin[];
   activeZoneId: string | null;
   editMode: boolean;
   onSetZones: (zones: Zone[]) => void;
-  onSetSafeZones: (safeZones: SafeZone[]) => void;
+  onSetSafeZones: (safeZones: SafeMargin[]) => void;
   onSetActiveZoneId: (id: string | null) => void;
   onSetEditMode: (mode: boolean) => void;
 }
@@ -105,7 +105,7 @@ export default function ZoneEditorPanel({
   };
 
   const addSafeZone = () => {
-    const newSz: SafeZone = {
+    const newSz: SafeMargin = {
       id: crypto.randomUUID(),
       name: `Safe ${safeZones.length + 1}`,
       points: [],
@@ -128,7 +128,7 @@ export default function ZoneEditorPanel({
     if (activeZoneId === id) onSetActiveZoneId(null);
   };
 
-  const updateSafeZone = (id: string, updates: Partial<SafeZone>) => {
+  const updateSafeZone = (id: string, updates: Partial<SafeMargin>) => {
     onSetSafeZones(safeZones.map((z) => (z.id === id ? { ...z, ...updates } : z)));
   };
 

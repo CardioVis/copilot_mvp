@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Point, Zone, SafeZone } from "@/lib/types";
+import { Point, Zone, SafeMargin } from "@/lib/types";
 import {
   hatch,
   safeZoneLine,
@@ -17,11 +17,11 @@ import {
 
 interface SegmentationOverlayProps {
   zones: Zone[];
-  safeZones: SafeZone[];
+  safeZones: SafeMargin[];
   activeZoneId: string | null;
   editMode: boolean;
   onUpdateZone: (zoneId: string, updates: Partial<Zone>) => void;
-  onUpdateSafeZone: (zoneId: string, updates: Partial<SafeZone>) => void;
+  onUpdateSafeZone: (zoneId: string, updates: Partial<SafeMargin>) => void;
   animGroupOpacity?: number;
   labelScale: number;
   showDangerIcon: boolean;

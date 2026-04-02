@@ -1,4 +1,4 @@
-import { Zone, SafeZone, SafeZoneLineStyle, ZoneFillStyle } from "./types";
+import { Zone, SafeMargin, SafeZoneLineStyle, ZoneFillStyle } from "./types";
 import { safeZoneLine, safeZoneArea } from "./zoneStyles";
 
 const VALID_FILL_STYLES: ZoneFillStyle[] = ["hatch", "solid", "outline", "dashed"];
@@ -90,7 +90,7 @@ export function deserializeZones(text: string): Zone[] {
  *   x,y
  *   ...
  */
-export function serializeSafeZones(safeZones: SafeZone[]): string {
+export function serializeSafeZones(safeZones: SafeMargin[]): string {
   return safeZones
     .map((sz) => {
       let header = `SAFEZONE:${sz.id}:${sz.name}:${sz.lineColor}:${sz.lineWidth}:${sz.lineOpacity}:${sz.lineStyle}:${sz.areaColor}:${sz.areaWidth}:${sz.areaOpacity}`;
@@ -105,10 +105,10 @@ export function serializeSafeZones(safeZones: SafeZone[]): string {
     .join("\n\n");
 }
 
-export function deserializeSafeZones(text: string): SafeZone[] {
-  const safeZones: SafeZone[] = [];
+export function deserializeSafeZones(text: string): SafeMargin[] {
+  const safeZones: SafeMargin[] = [];
   const lines = text.trim().split("\n");
-  let current: SafeZone | null = null;
+  let current: SafeMargin | null = null;
 
   for (const line of lines) {
     const trimmed = line.trim();
