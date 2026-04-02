@@ -396,6 +396,48 @@ export function renderBoundaryOverlay(
     ctx.fillStyle = `rgba(255,255,255,${labelAlpha})`;
     ctx.fillText(zone.label, 0, 0);
 
+    // Warning icon — shown only while the boundary is flashing, blinks with it
+    if (hint?.flashing) {
+      const iconSize = bh;
+      const iconX = -bw / 2 - iconSize - 4; // 4px gap to the left of the badge
+      const iconY = -iconSize / 2;
+      const iconAlpha = hint.opacity; // matches the boundary blink opacity
+
+      // Yellow triangle background
+      const triCx = iconX + iconSize / 2;
+      const triTop = iconY;
+      const triBot = iconY + iconSize;
+      ctx.fillStyle = `rgba(234,179,8,${iconAlpha})`;
+      ctx.beginPath();
+      ctx.moveTo(triCx, triTop);
+      ctx.lineTo(iconX + iconSize, triBot);
+      ctx.lineTo(iconX, triBot);
+      ctx.closePath();
+      ctx.fill();
+
+      // Dark border
+      ctx.strokeStyle = `rgba(120,80,0,${iconAlpha})`;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(triCx, triTop);
+      ctx.lineTo(iconX + iconSize, triBot);
+      ctx.lineTo(iconX, triBot);
+      ctx.closePath();
+      ctx.stroke();
+
+      // "!" glyph
+      ctx.fillStyle = `rgba(28,25,23,${iconAlpha})`;
+      ctx.font = `bold ${Math.round(iconSize * 0.55)}px system-ui, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("!", triCx, triBot * 0.62);
+
+      // Restore text settings for subsequent zones
+      ctx.font = `${fontSize}px system-ui, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+    }
+
     ctx.restore();
   }
 }
