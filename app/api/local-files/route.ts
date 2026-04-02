@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { readFile, readdir, stat } from "fs/promises";
 import path from "path";
 
-const ALLOWED_FILES = new Set(["footage.mp4", "labels_points.json"]);
+const ALLOWED_FILES = new Set(["footage.mp4", "labels_points.json", "labels.json"]);
 
 function isValidDirectory(dir: string): boolean {
   // Must be an absolute path, no path traversal
@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "File not found" }, { status: 404 });
   }
 
-  if (file === "labels_points.json") {
+  if (file === "labels_points.json" || file === "labels.json") {
     const content = await readFile(filePath, "utf-8");
     return NextResponse.json(JSON.parse(content));
   }

@@ -3,10 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   renderBoundaryOverlay,
+  renderSegmentationOverlay,
   getLabelColor,
   BoundaryZone,
   BoundaryRecord,
   LabelColor,
+  SegmentationTag,
 } from "@/lib/rleDecoder";
 import SideBar from "@/components/SideBar";
 import { Zone, SafeZone } from "@/lib/types";
@@ -15,6 +17,11 @@ interface FrameLabels {
   /** frame number extracted from image name */
   frameNum: number;
   zones: BoundaryZone[];
+}
+
+interface FrameRleLabels {
+  frameNum: number;
+  tags: SegmentationTag[];
 }
 
 export default function VideoPlayerTab() {
@@ -38,6 +45,11 @@ export default function VideoPlayerTab() {
   const [duration, setDuration] = useState(0);
   const [currentZoneNames, setCurrentZoneNames] = useState<Set<string>>(new Set());
   const objectUrlRef = useRef<string | null>(null);
+  const labelsCanvasRef = useRef<HTMLCanvasElement>(null);
+  const lastLabelFrameIndexRef = useRef<number>(-1);
+
+  const [showLabels, setShowLabels] = useState(true);
+  const [frameRleLabels, setFrameRleLabels] = useState<FrameRleLabels[]>([]);
 
   // Derive Zone[] from all frame labels for SideBar
   const detectedZones = useMemo((): Zone[] => {
@@ -77,6 +89,20 @@ export default function VideoPlayerTab() {
     return parsed;
   }, []);
 
+  // Parse labels.json (RLE) into per-frame label data
+  const parseRleLabels = useCallback(
+    (records: Array<{ image: string; tags: SegmentationTag[] }>) => {
+      const parsed: FrameRleLabels[] = records.map((rec) => {
+        const match = rec.image.match(/(\d+)/);
+        const frameNum = match ? parseInt(match[1], 10) : 0;
+        return { frameNum, tags: rec.tags };
+      });
+      parsed.sort((a, b) => a.frameNum - b.frameNum);
+      return parsed;
+    },
+    []
+  );
+
   // Load from server API (local directory path)
   const loadFromServer = useCallback(async () => {
     setLoading(true);
@@ -106,6 +132,25 @@ export default function VideoPlayerTab() {
         setFrameLabels(parseLabels(labelsData));
       }
 
+      // Load RLE labels (optional — no error if missing)
+      if (info.files?.includes("labels.json")) {
+        try {
+          const rleRes = await fetch(
+            `/api/local-files?dir=${encodeURIComponent(dirPath)}&file=labels.json`
+          );
+          if (rleRes.ok) {
+            const rleData = await rleRes.json();
+            setFrameRleLabels(Array.isArray(rleData) ? parseRleLabels(rleData) : []);
+          } else {
+            setFrameRleLabels([]);
+          }
+        } catch {
+          setFrameRleLabels([]);
+        }
+      } else {
+        setFrameRleLabels([]);
+      }
+
       // Set video source (streamed from API)
       setVideoSrc(
         `/api/local-files?dir=${encodeURIComponent(dirPath)}&file=footage.mp4`
@@ -115,10 +160,11 @@ export default function VideoPlayerTab() {
       setError(err instanceof Error ? err.message : "Failed to load");
       setVideoSrc(null);
       setFrameLabels([]);
+      setFrameRleLabels([]);
     } finally {
       setLoading(false);
     }
-  }, [dirPath, parseLabels]);
+  }, [dirPath, parseLabels, parseRleLabels]);
 
   // Load via File System Access API (browser picker)
   const loadFromPicker = useCallback(async () => {
@@ -137,12 +183,14 @@ export default function VideoPlayerTab() {
 
       let videoHandle: FileSystemFileHandle | null = null;
       let labelsHandle: FileSystemFileHandle | null = null;
+      let rleLabelsHandle: FileSystemFileHandle | null = null;
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       for await (const [name, handle] of (dirHandle as any).entries()) {
         if (handle.kind !== "file") continue;
         if (name === "footage.mp4") videoHandle = handle;
         if (name === "labels_points.json") labelsHandle = handle;
+        if (name === "labels.json") rleLabelsHandle = handle;
       }
 
       if (!videoHandle) throw new Error("footage.mp4 not found in directory");
@@ -163,14 +211,29 @@ export default function VideoPlayerTab() {
       setVideoSrc(url);
       setDirPath(dirHandle.name);
       setUseFsApi(true);
+
+      // Load RLE labels (optional)
+      if (rleLabelsHandle) {
+        try {
+          const rleFile = await rleLabelsHandle.getFile();
+          const rleText = await rleFile.text();
+          const rleRecords = JSON.parse(rleText);
+          setFrameRleLabels(Array.isArray(rleRecords) ? parseRleLabels(rleRecords) : []);
+        } catch {
+          setFrameRleLabels([]);
+        }
+      } else {
+        setFrameRleLabels([]);
+      }
     } catch (err: unknown) {
       if ((err as { name?: string })?.name !== "AbortError") {
         setError(err instanceof Error ? err.message : "Failed to load");
+        setFrameRleLabels([]);
       }
     } finally {
       setLoading(false);
     }
-  }, [parseLabels]);
+  }, [parseLabels, parseRleLabels]);
 
   function revokeObjectUrl() {
     if (objectUrlRef.current) {
@@ -210,11 +273,19 @@ export default function VideoPlayerTab() {
   const renderOverlay = useCallback(() => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    if (!video || !canvas || !showOverlay) {
-      if (canvas) {
-        const ctx = canvas.getContext("2d");
-        ctx?.clearRect(0, 0, canvas.width, canvas.height);
-      }
+    if (!video || !canvas) return;
+
+    // Always update frame counter and zone names regardless of overlay visibility
+    const frameIndex = Math.round(video.currentTime * fps);
+    const entry = frameLabels[Math.min(frameIndex, frameLabels.length - 1)];
+    if (entry) {
+      setCurrentFrame(`Frame ${entry.frameNum} (${frameIndex + 1}/${frameLabels.length})`);
+      setCurrentZoneNames(new Set(entry.zones.map((z) => z.label)));
+    }
+
+    if (!showOverlay) {
+      const ctx = canvas.getContext("2d");
+      ctx?.clearRect(0, 0, canvas.width, canvas.height);
       return;
     }
 
@@ -226,15 +297,42 @@ export default function VideoPlayerTab() {
     }
 
     renderBoundaryOverlay(canvas, zones, dimensions.width || 1920, dimensions.height || 1080);
-
-    // Update display frame info and current visible zones
-    const frameIndex = Math.round(video.currentTime * fps);
-    const entry = frameLabels[Math.min(frameIndex, frameLabels.length - 1)];
-    if (entry) {
-      setCurrentFrame(`Frame ${entry.frameNum} (${frameIndex + 1}/${frameLabels.length})`);
-      setCurrentZoneNames(new Set(entry.zones.map((z) => z.label)));
-    }
   }, [showOverlay, getZonesForTime, dimensions, fps, frameLabels]);
+
+  // Render RLE segmentation labels on the labels canvas
+  const renderLabelsOverlay = useCallback(() => {
+    const video = videoRef.current;
+    const canvas = labelsCanvasRef.current;
+    if (!canvas) return;
+
+    if (!video || !videoSrc || !showLabels || frameRleLabels.length === 0) {
+      if (lastLabelFrameIndexRef.current !== -1) {
+        const ctx = canvas.getContext("2d");
+        ctx?.clearRect(0, 0, canvas.width, canvas.height);
+        lastLabelFrameIndexRef.current = -1;
+      }
+      return;
+    }
+
+    const frameIndex = Math.round(video.currentTime * fps);
+    const idx = Math.min(Math.max(frameIndex, 0), frameRleLabels.length - 1);
+    if (idx === lastLabelFrameIndexRef.current) return;
+    lastLabelFrameIndexRef.current = idx;
+
+    const entry = frameRleLabels[idx];
+    if (!entry || entry.tags.length === 0) {
+      const ctx = canvas.getContext("2d");
+      ctx?.clearRect(0, 0, canvas.width, canvas.height);
+      return;
+    }
+
+    renderSegmentationOverlay(
+      canvas,
+      entry.tags,
+      dimensions.width || 1920,
+      dimensions.height || 1080
+    );
+  }, [showLabels, frameRleLabels, fps, dimensions, videoSrc]);
 
   // Animation loop for overlay
   useEffect(() => {
@@ -246,6 +344,7 @@ export default function VideoPlayerTab() {
     function tick() {
       if (!running) return;
       renderOverlay();
+      renderLabelsOverlay();
       if (video) setCurrentTime(video.currentTime);
       animFrameRef.current = requestAnimationFrame(tick);
     }
@@ -255,7 +354,7 @@ export default function VideoPlayerTab() {
       running = false;
       cancelAnimationFrame(animFrameRef.current);
     };
-  }, [videoSrc, renderOverlay]);
+  }, [videoSrc, renderOverlay, renderLabelsOverlay]);
 
   // Play / Pause
   const togglePlay = useCallback(() => {
@@ -320,6 +419,19 @@ export default function VideoPlayerTab() {
             >
               {showOverlay ? "Hide Boundary" : "Show Boundary"}
             </button>
+
+            {frameRleLabels.length > 0 && (
+              <button
+                onClick={() => setShowLabels((v) => !v)}
+                className={`rounded border px-3 py-1 text-xs font-medium transition-colors whitespace-nowrap ${
+                  showLabels
+                    ? "border-violet-500 bg-violet-500/20 text-violet-300"
+                    : "border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100"
+                }`}
+              >
+                {showLabels ? "Hide Labels" : "Show Labels"}
+              </button>
+            )}
 
             <div className="flex items-center gap-1 whitespace-nowrap">
               <label className="text-xs text-zinc-500">FPS</label>
@@ -387,6 +499,11 @@ export default function VideoPlayerTab() {
                 />
                 <canvas
                   ref={canvasRef}
+                  className="absolute inset-0 w-full h-full pointer-events-none object-contain"
+                  style={{ mixBlendMode: "normal" }}
+                />
+                <canvas
+                  ref={labelsCanvasRef}
                   className="absolute inset-0 w-full h-full pointer-events-none object-contain"
                   style={{ mixBlendMode: "normal" }}
                 />
