@@ -23,14 +23,14 @@ export default function VideoPlayerTab() {
   const containerRef = useRef<HTMLDivElement>(null);
   const animFrameRef = useRef<number>(0);
 
-  const [dirPath, setDirPath] = useState("D:\\Projects\\Dataset_new");
+  const [dirPath, setDirPath] = useState("D:\\Projects\\Features\\Feature_1");
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
   const [frameLabels, setFrameLabels] = useState<FrameLabels[]>([]);
   const [playing, setPlaying] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showOverlay, setShowOverlay] = useState(true);
-  const [fps, setFps] = useState(10);
+  const [fps, setFps] = useState(18);
   const [currentFrame, setCurrentFrame] = useState<string>("");
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const [useFsApi, setUseFsApi] = useState(false);

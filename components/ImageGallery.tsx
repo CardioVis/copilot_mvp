@@ -15,7 +15,8 @@ export default function ImageGallery() {
   const [images, setImages] = useState<ImageEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
-  const [folderName, setFolderName] = useState("public/");
+  const [folderName, setFolderName] = useState("D:\\Projects\\Features\\Feature_1");
+  const [useFsApi, setUseFsApi] = useState(false);
   const objectUrlsRef = useRef<string[]>([]);
 
   // Segmentation overlay state
@@ -119,11 +120,11 @@ export default function ImageGallery() {
 
   async function loadDefault() {
     setLoading(true);
+    setUseFsApi(false);
     setSelectedIndex(null);
     try {
       const data = await fetch("/api/images").then((r) => r.json());
       setImages(data.images ?? []);
-      setFolderName("public/frames/");
     } catch {
       setImages([]);
     } finally {
@@ -195,6 +196,7 @@ export default function ImageGallery() {
       newImages.sort((a, b) => a.name.localeCompare(b.name));
       setImages(newImages);
       setFolderName(dirHandle.name + "/");
+      setUseFsApi(true);
 
       // Load labels.json from the chosen folder
       if (labelsHandle) {
@@ -235,20 +237,33 @@ export default function ImageGallery() {
     <main className="flex flex-1 flex-col overflow-hidden bg-zinc-950">
       {/* Header bar */}
       <div className="flex items-center gap-3 border-b border-zinc-800 px-4 py-2">
-        <span className="text-xs font-medium uppercase tracking-wider text-zinc-500 flex-1 truncate">
-          Image Gallery &mdash; {folderName}
+        <span className="text-xs font-medium uppercase tracking-wider text-zinc-500 shrink-0">
+          Image Gallery
         </span>
-        {folderName !== "public/" && (
-          <button
-            onClick={loadDefault}
-            className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors whitespace-nowrap"
-          >
-            Reset to public/
-          </button>
+
+        {!useFsApi && (
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <input
+              type="text"
+              value={folderName}
+              onChange={(e) => setFolderName(e.target.value)}
+              placeholder="Folder path (e.g. public/frames)"
+              className="flex-1 min-w-0 rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-300 placeholder-zinc-600 focus:border-zinc-500 focus:outline-none"
+            />
+            <button
+              onClick={loadDefault}
+              disabled={loading || !folderName.trim()}
+              className="rounded border border-zinc-700 bg-zinc-800 px-3 py-1 text-xs font-medium text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100 transition-colors whitespace-nowrap disabled:opacity-50"
+            >
+              {loading ? "Loading…" : "Load"}
+            </button>
+          </div>
         )}
+
         <button
           onClick={handleChooseFolder}
-          className="rounded border border-zinc-700 bg-zinc-800 px-3 py-1 text-xs font-medium text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100 transition-colors whitespace-nowrap"
+          disabled={loading}
+          className="rounded border border-zinc-700 bg-zinc-800 px-3 py-1 text-xs font-medium text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100 transition-colors whitespace-nowrap disabled:opacity-50"
         >
           Choose Folder…
         </button>

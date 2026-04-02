@@ -429,8 +429,8 @@ function processProject(projectDir) {
   }
 
   // Write outputs
-  const rlePath = path.join(projectDir, "labels_parsed.json");
-  const pointsPath = path.join(projectDir, "labels_parsed_points.json");
+  const rlePath = path.join(projectDir, "labels.json");
+  const pointsPath = path.join(projectDir, "labels_points.json");
 
   fs.writeFileSync(rlePath, JSON.stringify(rleOutput, null, 2), "utf8");
   fs.writeFileSync(pointsPath, JSON.stringify(pointsOutput, null, 2), "utf8");

@@ -2,21 +2,22 @@
 /**
  * frames_to_video.js
  *
- * Creates a video from a folder of image frames named in the pattern:
+ * Creates a video for every project subfolder inside a root directory.
+ * Each project must contain a frames/ subfolder with files named:
  *   frame_XXXXX.{png,jpg,jpeg}
+ * The output video is saved as <project>/footage.mp4.
  *
  * Requires ffmpeg to be installed and available on PATH.
  *
  * Usage:
- *   node scripts/frames_to_video.js [framesDir] [outputFile] [--fps=N]
+ *   node scripts/frames_to_video.js [rootDir] [--fps=N]
  *
  * Defaults:
- *   framesDir  → ./frames
- *   outputFile → ./output.mp4
- *   fps        → 30
+ *   rootDir → D:\Projects\Features
+ *   fps     → 30
  *
  * Examples:
- *   node scripts/frames_to_video.js ./public/frames ./output.mp4 --fps=25
+ *   node scripts/frames_to_video.js "D:\Projects\Features" --fps=25
  */
 
 const { execSync } = require("child_process");
@@ -35,13 +36,12 @@ const flags = Object.fromEntries(
     })
 );
 
-const framesDir = path.resolve(args[0] ?? "./frames");
-const outputFile = path.resolve(args[1] ?? "./output.mp4");
+const rootDir = path.resolve(args[0] ?? "D:\\Projects\\Features");
 const fps = parseInt(flags.fps ?? "30", 10);
 
 // --- Validate inputs ---
-if (!fs.existsSync(framesDir)) {
-  console.error(`Error: frames directory not found: ${framesDir}`);
+if (!fs.existsSync(rootDir)) {
+  console.error(`Error: root directory not found: ${rootDir}`);
   process.exit(1);
 }
 
@@ -49,26 +49,6 @@ if (isNaN(fps) || fps <= 0) {
   console.error(`Error: invalid fps value: ${flags.fps}`);
   process.exit(1);
 }
-
-// --- Detect frame extension ---
-const files = fs.readdirSync(framesDir).sort();
-const framePattern = /^frame_\d+\.(png|jpe?g)$/i;
-const frameFiles = files.filter((f) => framePattern.test(f));
-
-if (frameFiles.length === 0) {
-  console.error(
-    `Error: no files matching frame_XXXXX.{png,jpg,jpeg} found in: ${framesDir}`
-  );
-  process.exit(1);
-}
-
-// Use the extension of the first frame file
-const ext = path.extname(frameFiles[0]).toLowerCase();
-
-console.log(`Found ${frameFiles.length} frame(s) in: ${framesDir}`);
-console.log(`Output : ${outputFile}`);
-console.log(`FPS    : ${fps}`);
-console.log(`Format : ${ext}`);
 
 // --- Verify ffmpeg is available ---
 try {
@@ -80,43 +60,84 @@ try {
   process.exit(1);
 }
 
-// --- Build ffmpeg concat list ---
-// Using the concat demuxer so frames can start at any number (e.g. frame_00120)
-const outputDir = path.dirname(outputFile);
-if (!fs.existsSync(outputDir)) {
-  fs.mkdirSync(outputDir, { recursive: true });
+// --- Discover project subfolders ---
+const projects = fs.readdirSync(rootDir)
+  .filter((name) => fs.statSync(path.join(rootDir, name)).isDirectory())
+  .sort();
+
+if (projects.length === 0) {
+  console.error(`Error: no subdirectories found in: ${rootDir}`);
+  process.exit(1);
 }
 
-const concatListPath = path.join(outputDir, "_concat_list.txt");
+console.log(`Root  : ${rootDir}`);
+console.log(`FPS   : ${fps}`);
+console.log(`Found ${projects.length} project(s): ${projects.join(", ")}\n`);
+
+// --- Process each project ---
+const framePattern = /^frame_\d+\.(png|jpe?g)$/i;
 const duration = 1 / fps;
-const concatContent = frameFiles
-  .map((f) => {
-    // Use forward slashes and escape single quotes for ffmpeg
-    const absPath = path.join(framesDir, f).replace(/\\/g, "/").replace(/'/g, "'\\\\''" );
-    return `file '${absPath}'\nduration ${duration.toFixed(6)}`;
-  })
-  .join("\n");
 
-fs.writeFileSync(concatListPath, concatContent + "\n", "utf8");
+function buildVideo(framesDir, outputFile) {
+  const frameFiles = fs.readdirSync(framesDir)
+    .filter((f) => framePattern.test(f))
+    .sort();
 
-const cmd = [
-  "ffmpeg",
-  "-y",                          // overwrite output without prompting
-  "-f concat",                   // use concat demuxer (explicit file list)
-  "-safe 0",                     // allow absolute paths in the list
-  `-i "${concatListPath}"`,
-  "-c:v libx264",                // H.264 codec — widely compatible
-  "-pix_fmt yuv420p",            // required for QuickTime / browser compatibility
-  "-crf 18",                     // quality: 0 (lossless) – 51 (worst); 18 is near-lossless
-  `"${outputFile}"`,
-].join(" ");
+  if (frameFiles.length === 0) {
+    console.log(`  No matching frames found, skipping.`);
+    return;
+  }
 
-console.log(`\nRunning: ${cmd}\n`);
+  console.log(`  ${frameFiles.length} frame(s) → ${outputFile}`);
 
-try {
-  execSync(cmd, { stdio: "inherit" });
-  console.log(`\nDone! Video saved to: ${outputFile}`);
-} finally {
-  // Clean up the temporary concat list
-  fs.rmSync(concatListPath, { force: true });
+  const concatListPath = path.join(path.dirname(outputFile), "_concat_list.txt");
+  const concatContent = frameFiles
+    .map((f) => {
+      const absPath = path.join(framesDir, f).replace(/\\/g, "/").replace(/'/g, "'\\''");
+      return `file '${absPath}'\nduration ${duration.toFixed(6)}`;
+    })
+    .join("\n");
+
+  fs.writeFileSync(concatListPath, concatContent + "\n", "utf8");
+
+  const cmd = [
+    "ffmpeg",
+    "-y",
+    "-f concat",
+    "-safe 0",
+    `-i "${concatListPath}"`,
+    "-c:v libx264",
+    "-pix_fmt yuv420p",
+    "-crf 18",
+    `"${outputFile}"`,
+  ].join(" ");
+
+  try {
+    execSync(cmd, { stdio: "inherit" });
+    console.log(`  Saved: ${outputFile}`);
+  } finally {
+    fs.rmSync(concatListPath, { force: true });
+  }
 }
+
+let succeeded = 0;
+let skipped = 0;
+
+for (const project of projects) {
+  const projectDir = path.join(rootDir, project);
+  const framesDir = path.join(projectDir, "frames");
+  const outputFile = path.join(projectDir, "footage.mp4");
+
+  console.log(`\n── ${project} ──`);
+
+  if (!fs.existsSync(framesDir)) {
+    console.log(`  No frames/ subfolder found, skipping.`);
+    skipped++;
+    continue;
+  }
+
+  buildVideo(framesDir, outputFile);
+  succeeded++;
+}
+
+console.log(`\nDone. ${succeeded} video(s) created, ${skipped} skipped.`);
