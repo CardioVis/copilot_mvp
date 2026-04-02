@@ -111,22 +111,21 @@ function DangerZonesContent({ zones }: { zones: Zone[] }) {
       {zones.length === 0 ? (
         <p className="text-xs text-zinc-600">No danger zones found.</p>
       ) : (
-        zones.map((zone) => (
-          <div key={zone.id}>
-            <p className="text-sm font-medium text-white">{zone.name}</p>
-            <div className="mt-1.5 flex items-center gap-2 text-xs">
-              <div className="flex-1 h-1.5 bg-zinc-700 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-emerald-500 rounded-full transition-all"
-                  style={{ width: `${HARDCODED_ACCURACY}%` }}
-                />
-              </div>
-              <span className="font-mono text-zinc-400 text-[10px] w-10 text-right">
-                {HARDCODED_ACCURACY}%
-              </span>
+        zones.map((zone) => {
+          return (
+            <div key={zone.id} className="flex items-center gap-3">
+              <svg
+                className="h-3 w-3 shrink-0 text-rose-600"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                role="img"
+              >
+                <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z" />
+              </svg>
+              <p className="text-sm text-white">{zone.name}</p>
             </div>
-          </div>
-        ))
+          );
+        })
       )}
     </div>
   );
