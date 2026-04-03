@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { renderSegmentationOverlay, renderBoundaryOverlay, SegmentationTag, BoundaryZone, BoundaryRecord } from "@/lib/rleDecoder";
+import { renderSegmentationOverlay, renderBoundaryOverlay, renderLinesOverlay, SegmentationTag, BoundaryZone, BoundaryRecord, LineAnnotation } from "@/lib/rleDecoder";
 
 interface ImageEntry {
   name: string;
@@ -32,6 +32,12 @@ export default function ImageGallery() {
   const [boundaryUrl, setBoundaryUrl] = useState<string | null>(null);
   const boundaryCache = useRef<Map<string, string>>(new Map());
 
+  // Lines overlay state
+  const [linesMap, setLinesMap] = useState<Record<string, LineAnnotation[]>>({});
+  const [showLines, setShowLines] = useState(false);
+  const [linesUrl, setLinesUrl] = useState<string | null>(null);
+  const linesCache = useRef<Map<string, string>>(new Map());
+
   const selected = selectedIndex !== null ? images[selectedIndex] ?? null : null;
 
   const goNext = useCallback(() =>
@@ -60,12 +66,20 @@ export default function ImageGallery() {
   }
 
   function loadBoundaryFromRecords(records: BoundaryRecord[]) {
-    const map: Record<string, BoundaryZone[]> = {};
-    for (const rec of records) map[rec.image] = rec.zones;
-    setBoundaryMap(map);
+    const boundaryMapNew: Record<string, BoundaryZone[]> = {};
+    const linesMapNew: Record<string, LineAnnotation[]> = {};
+    for (const rec of records) {
+      boundaryMapNew[rec.image] = rec.zones;
+      if (rec.lines && rec.lines.length > 0) linesMapNew[rec.image] = rec.lines;
+    }
+    setBoundaryMap(boundaryMapNew);
     setShowBoundary(false);
     setBoundaryUrl(null);
     boundaryCache.current.clear();
+    setLinesMap(linesMapNew);
+    setShowLines(false);
+    setLinesUrl(null);
+    linesCache.current.clear();
   }
 
   useEffect(() => {
@@ -112,6 +126,23 @@ export default function ImageGallery() {
     boundaryCache.current.set(selectedName, url);
     setBoundaryUrl(url);
   }, [showBoundary, selectedName, boundaryMap]);
+
+  // Render lines overlay when image or toggle changes
+  useEffect(() => {
+    if (!showLines || !selectedName || !linesMap[selectedName]) {
+      setLinesUrl(null);
+      return;
+    }
+    if (linesCache.current.has(selectedName)) {
+      setLinesUrl(linesCache.current.get(selectedName)!);
+      return;
+    }
+    const canvas = document.createElement("canvas");
+    renderLinesOverlay(canvas, linesMap[selectedName]);
+    const url = canvas.toDataURL();
+    linesCache.current.set(selectedName, url);
+    setLinesUrl(url);
+  }, [showLines, selectedName, linesMap]);
 
   function revokeAll() {
     objectUrlsRef.current.forEach((u) => URL.revokeObjectURL(u));
@@ -293,6 +324,18 @@ export default function ImageGallery() {
                 {showBoundary ? "Hide Boundary" : "Show Boundary"}
               </button>
             )}
+            {linesMap[selected.name] && (
+              <button
+                onClick={() => setShowLines((v) => !v)}
+                className={`rounded border px-3 py-1 text-xs font-medium transition-colors whitespace-nowrap ${
+                  showLines
+                    ? "border-orange-500 bg-orange-500/20 text-orange-300"
+                    : "border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100"
+                }`}
+              >
+                {showLines ? "Hide Lines" : "Show Lines"}
+              </button>
+            )}
             <span className="text-xs text-zinc-500">
               {selectedIndex !== null ? selectedIndex + 1 : ""} / {images.length}
             </span>
@@ -336,6 +379,15 @@ export default function ImageGallery() {
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={overlayUrl}
+                  alt=""
+                  className="absolute inset-0 m-auto max-h-full max-w-full object-contain pointer-events-none"
+                  style={{ maxHeight: "calc(100vh - 6rem)" }}
+                />
+              )}
+              {showLines && linesUrl && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={linesUrl}
                   alt=""
                   className="absolute inset-0 m-auto max-h-full max-w-full object-contain pointer-events-none"
                   style={{ maxHeight: "calc(100vh - 6rem)" }}

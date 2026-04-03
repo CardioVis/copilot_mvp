@@ -10,6 +10,7 @@ import {
   boundaryFill,
   overlayLabel,
   segmentationMask,
+  annotationLine,
 } from "./overlayConfig";
 import type { ZoneRenderHint } from "./BoundaryAnimationManager";
 import { classifyZone, BoundaryAnimationManager } from "./BoundaryAnimationManager";
@@ -107,7 +108,17 @@ const KNOWN_COLORS: Record<string, LabelColor> = {
   Grasper: { r: 50, g: 220, b: 100 },
   Pericardium: { r: 255, g: 80, b: 80 },
   "Epicardial adipose tissue": { r: 255, g: 220, b: 50 },
+  Incision: { r: 50, g: 220, b: 80 },
+  Centerline: { r: 50, g: 220, b: 80 },
 };
+
+function lerpColor(a: LabelColor, b: LabelColor, t: number): LabelColor {
+  return {
+    r: Math.round(a.r + (b.r - a.r) * t),
+    g: Math.round(a.g + (b.g - a.g) * t),
+    b: Math.round(a.b + (b.b - a.b) * t),
+  };
+}
 
 const EXTRA_COLORS: LabelColor[] = [
   { r: 180, g: 100, b: 255 },
@@ -232,8 +243,8 @@ export function renderSegmentationOverlay(
     const m = ctx.measureText(li.label);
     const bw = m.width + overlayLabel.paddingX * 2;
     const bh = fontSize + overlayLabel.paddingY * 2;
-    const x = li.cx;
-    const y = li.cy;
+    const x = li.cx - width * 0.015;
+    const y = li.cy + height * 0.015;
 
     ctx.fillStyle = `rgba(0,0,0,${overlayLabel.backgroundOpacity})`;
     ctx.beginPath();
@@ -262,9 +273,15 @@ export interface BoundaryZone {
   points: { x: number; y: number }[][] | { x: number; y: number }[];
 }
 
+export interface LineAnnotation {
+  label: string;
+  points: { x: number; y: number }[];
+}
+
 export interface BoundaryRecord {
   image: string;
   zones: BoundaryZone[];
+  lines?: LineAnnotation[];
 }
 
 /** Normalize points field to always be an array of polygons. */
@@ -292,16 +309,21 @@ export function renderBoundaryOverlay(
   width = MASK_WIDTH,
   height = MASK_HEIGHT,
   animManager?: BoundaryAnimationManager,
+  showSafeZones = false,
 ): void {
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext("2d")!;
   ctx.clearRect(0, 0, width, height);
 
+  const visibleZones = showSafeZones
+    ? zones
+    : zones.filter((z) => classifyZone(z.label) !== "safe");
+
   // Assign stable colour index
   const labelIndex = new Map<string, number>();
   let idx = 0;
-  for (const z of zones) {
+  for (const z of visibleZones) {
     if (!labelIndex.has(z.label)) labelIndex.set(z.label, idx++);
   }
 
@@ -315,7 +337,7 @@ export function renderBoundaryOverlay(
       ? [boundaryLine.dashLength, boundaryLine.gapLength]
       : [];
 
-  for (const zone of zones) {
+  for (const zone of visibleZones) {
     const polygons = normalizePolygons(zone.points);
     const color = getBoundaryColor(zone.label);
     const zoneAlpha = animManager?.getHint(zone.label)?.opacity ?? 1;
@@ -350,7 +372,7 @@ export function renderBoundaryOverlay(
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
 
-  for (const zone of zones) {
+  for (const zone of visibleZones) {
     const polygons = normalizePolygons(zone.points);
     const color = getBoundaryColor(zone.label);
     const hint = animManager?.getHint(zone.label);
@@ -373,7 +395,7 @@ export function renderBoundaryOverlay(
 
     // Apply scale transform around the smoothed label centre
     ctx.save();
-    ctx.translate(smoothed.x, smoothed.y);
+    ctx.translate(smoothed.x - width * 0.015, smoothed.y + height * 0.015);
     ctx.scale(scale, scale);
 
     const m = ctx.measureText(zone.label);
@@ -397,40 +419,44 @@ export function renderBoundaryOverlay(
     ctx.fillText(zone.label, 0, 0);
 
     // Warning icon — shown only while the boundary is flashing, blinks with it
+    // Matches the SVG triangle in SegmentationOverlay: points="0,-8 7,5 -7,5"
     if (hint?.flashing) {
-      const iconSize = bh;
-      const iconX = -bw / 2 - iconSize - 4; // 4px gap to the left of the badge
-      const iconY = -iconSize / 2;
-      const iconAlpha = hint.opacity; // matches the boundary blink opacity
+      const iconAlpha = hint.opacity;
 
-      // Yellow triangle background
-      const triCx = iconX + iconSize / 2;
-      const triTop = iconY;
-      const triBot = iconY + iconSize;
-      ctx.fillStyle = `rgba(234,179,8,${iconAlpha})`;
+      // Scale the SVG triangle (14×13 px at fontSize≈12) to match the canvas badge height
+      const svgH = 13; // tip(-8) to base(+5) in SVG space
+      // Slightly smaller than before so the triangle sits comfortably next to the badge
+      const scale2 = (bh / svgH) * 0.5;
+
+      // Triangle vertices in SVG space: tip at (0,-8), br at (7,5), bl at (-7,5)
+      // Place centroid to the left of the badge with an 8px gap
+      const gap = 8;
+      const cx2 = -bw / 2 - gap - 7 * scale2; // 7 = half-width in SVG space
+
+      ctx.save();
+      ctx.translate(cx2, 0);
+      ctx.scale(scale2, scale2);
+
       ctx.beginPath();
-      ctx.moveTo(triCx, triTop);
-      ctx.lineTo(iconX + iconSize, triBot);
-      ctx.lineTo(iconX, triBot);
+      ctx.moveTo(0, -8);
+      ctx.lineTo(7, 5);
+      ctx.lineTo(-7, 5);
       ctx.closePath();
+
+      ctx.fillStyle = `rgba(250,204,21,${iconAlpha})`;
       ctx.fill();
-
-      // Dark border
-      ctx.strokeStyle = `rgba(120,80,0,${iconAlpha})`;
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.moveTo(triCx, triTop);
-      ctx.lineTo(iconX + iconSize, triBot);
-      ctx.lineTo(iconX, triBot);
-      ctx.closePath();
+      ctx.strokeStyle = `rgba(146,64,14,${iconAlpha})`;
+      ctx.lineWidth = 1 / scale2; // keep stroke visually ~1px
       ctx.stroke();
 
-      // "!" glyph
+      // "!" glyph — fontSize=7, position y=2 to match SVG dominantBaseline=middle
       ctx.fillStyle = `rgba(28,25,23,${iconAlpha})`;
-      ctx.font = `bold ${Math.round(iconSize * 0.55)}px system-ui, sans-serif`;
+      ctx.font = `bold 7px system-ui, sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText("!", triCx, triBot * 0.62);
+      ctx.fillText("!", 0, 2);
+
+      ctx.restore();
 
       // Restore text settings for subsequent zones
       ctx.font = `${fontSize}px system-ui, sans-serif`;
@@ -439,5 +465,103 @@ export function renderBoundaryOverlay(
     }
 
     ctx.restore();
+  }
+}
+
+// ── Line annotation overlay ───────────────────────────────────────────────────
+
+/**
+ * Renders open polylines (e.g. incision lines) onto a canvas.
+ * Points are normalized 0–1 coordinates.
+ */
+export function renderLinesOverlay(
+  canvas: HTMLCanvasElement,
+  lines: LineAnnotation[],
+  width = MASK_WIDTH,
+  height = MASK_HEIGHT,
+): void {
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d")!;
+  ctx.clearRect(0, 0, width, height);
+
+  const labelIndex = new Map<string, number>();
+  let idx = 0;
+  for (const line of lines) {
+    if (!labelIndex.has(line.label)) labelIndex.set(line.label, idx++);
+  }
+
+  const lineWidth =
+    annotationLine.lineWidth > 0
+      ? annotationLine.lineWidth
+      : Math.max(annotationLine.minWidth, Math.round(width / annotationLine.autoScaleDivisor));
+  const fontSize = Math.max(
+    overlayLabel.minFontSize,
+    Math.round(width / overlayLabel.autoScaleDivisor),
+  );
+
+  ctx.lineJoin = "round";
+
+  const lineDash =
+    annotationLine.style === "dashed"
+      ? [annotationLine.dashLength, annotationLine.gapLength]
+      : [];
+
+  for (const line of lines) {
+    if (line.points.length < 2) continue;
+    const color = getLabelColor(line.label, labelIndex.get(line.label)!);
+
+    // Area gradient bands (drawn beneath the main line)
+    const area = annotationLine.area;
+    if (area.bands > 0 && area.width > 0) {
+      const outerRgb = hexToRgb(area.outerColor);
+      const bands = area.bands;
+      ctx.setLineDash([]);
+      ctx.lineCap = "round";
+      for (let bi = 0; bi < bands; bi++) {
+        const t = bands > 1 ? bi / (bands - 1) : 1;
+        const w = area.width * (1 - t * 0.7);
+        const bandColor = lerpColor(outerRgb, color, t);
+        const opacity = area.opacity * (0.4 + 0.6 * t);
+        ctx.strokeStyle = `rgba(${bandColor.r},${bandColor.g},${bandColor.b},${opacity})`;
+        ctx.lineWidth = w;
+        ctx.beginPath();
+        ctx.moveTo(line.points[0].x * (width - 1), line.points[0].y * (height - 1));
+        for (let pi = 1; pi < line.points.length; pi++) {
+          ctx.lineTo(line.points[pi].x * (width - 1), line.points[pi].y * (height - 1));
+        }
+        ctx.stroke();
+      }
+      ctx.lineCap = "butt";
+    }
+
+    ctx.setLineDash(lineDash);
+    ctx.strokeStyle = `rgba(${color.r},${color.g},${color.b},${annotationLine.opacity})`;
+    ctx.lineWidth = lineWidth;
+    ctx.beginPath();
+    ctx.moveTo(line.points[0].x * (width - 1), line.points[0].y * (height - 1));
+    for (let i = 1; i < line.points.length; i++) {
+      ctx.lineTo(line.points[i].x * (width - 1), line.points[i].y * (height - 1));
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Label badge at midpoint
+    if (!annotationLine.showLabel) continue;
+    const mid = line.points[Math.floor(line.points.length / 2)];
+    const mx = mid.x * (width - 1) - width * 0.015;
+    const my = mid.y * (height - 1) + height * 0.015;
+    ctx.font = `${fontSize}px system-ui, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    const m = ctx.measureText(line.label);
+    const bw = m.width + overlayLabel.paddingX * 2;
+    const bh = fontSize + overlayLabel.paddingY * 2;
+    ctx.fillStyle = `rgba(0,0,0,${overlayLabel.backgroundOpacity})`;
+    ctx.beginPath();
+    ctx.roundRect(mx - bw / 2, my - bh / 2, bw, bh, overlayLabel.borderRadius);
+    ctx.fill();
+    ctx.fillStyle = `rgba(${color.r},${color.g},${color.b},1)`;
+    ctx.fillText(line.label, mx, my);
   }
 }

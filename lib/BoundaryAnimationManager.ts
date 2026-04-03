@@ -46,7 +46,7 @@ export const animationConfig = {
   /** Duration of the danger-zone flash animation in seconds (video time). */
   flashDurationSec: 3,
   /** Number of full on/off blink cycles during the flash. */
-  flashCycles: 9,
+  flashCycles: 6,
   /** Peak label scale during the zoom-in animation (1 = normal). */
   labelZoomPeakScale: 1.8,
   /** Label offset-Y during zoom peak (px, negative = upward). */

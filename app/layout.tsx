@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Endoscopy Overlay",
-  description: "Professional endoscopy video overlay software",
+  title: "Hazard Awareness",
+  description: "Professional AI overlay software for hazard awareness",
 };
 
 export default function RootLayout({

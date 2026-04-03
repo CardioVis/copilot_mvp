@@ -1,5 +1,7 @@
 "use client";
 
+import { useRef, useState, useEffect } from "react";
+
 export type AppTab = "endoscopy" | "gallery" | "video";
 
 interface TaskBarProps {
@@ -10,12 +12,26 @@ interface TaskBarProps {
 }
 
 const TABS: { id: AppTab; label: string }[] = [
-    { id: "endoscopy", label: "Endoscopy" },
-    { id: "gallery", label: "Image Gallery" },
-    { id: "video", label: "Video Player" },
+    { id: "video", label: "Hazard Awareness" },
+    { id: "endoscopy", label: "Editor" },
+    { id: "gallery", label: "Dataset Preview" },
 ];
 
 export default function TaskBar({ isAnimating, onToggleAnimation, activeTab, onTabChange }: TaskBarProps) {
+    const [menuOpen, setMenuOpen] = useState(false);
+    const menuRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (!menuOpen) return;
+        const handleClickOutside = (e: MouseEvent) => {
+            if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+                setMenuOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, [menuOpen]);
+
     return (
         <header className="flex h-12 items-center justify-between border-b border-zinc-800 bg-zinc-950 px-4">
             {/* Left section: logo + tabs */}
@@ -40,21 +56,43 @@ export default function TaskBar({ isAnimating, onToggleAnimation, activeTab, onT
                 </nav>
             </div>
 
-            {/* Right section */}
-            <div className="flex items-center gap-2">
+            {/* Right section: settings icon with dropdown */}
+            <div className="relative flex items-center" ref={menuRef}>
                 <button
-                    onClick={onToggleAnimation}
-                    className={`border-2 rounded-md px-4 py-2 shadow transition-colors text-sm font-semibold flex gap-2 items-center ${
-                        isAnimating
-                            ? "border-amber-500 bg-amber-500/20 text-amber-400 hover:bg-amber-500/30"
-                            : "border-zinc-600 text-zinc-300 hover:bg-zinc-700"
+                    onClick={() => setMenuOpen((v) => !v)}
+                    title="Settings"
+                    className={`flex h-8 w-8 items-center justify-center rounded transition-colors ${
+                        menuOpen ? "bg-zinc-700 text-zinc-100" : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
                     }`}
                 >
-                    {isAnimating ? "⏸ Pause" : "▶ Play"}
+                    <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317a1.724 1.724 0 013.35 0 1.724 1.724 0 002.573 1.066 1.724 1.724 0 012.372 2.372 1.724 1.724 0 001.066 2.573 1.724 1.724 0 010 3.35 1.724 1.724 0 00-1.066 2.573 1.724 1.724 0 01-2.372 2.372 1.724 1.724 0 00-2.573 1.066 1.724 1.724 0 01-3.35 0 1.724 1.724 0 00-2.573-1.066 1.724 1.724 0 01-2.372-2.372 1.724 1.724 0 00-1.066-2.573 1.724 1.724 0 010-3.35 1.724 1.724 0 001.066-2.573 1.724 1.724 0 012.372-2.372 1.724 1.724 0 002.573-1.066z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
                 </button>
-                <button className="hover:bg-red-brand/60 border-red-brand border-2 text-white rounded-md px-4 py-2 shadow transition-colors text-sm font-semibold flex gap-2 items-center">
-                    Capture
-                </button>
+
+                {menuOpen && (
+                    <div className="absolute right-0 top-10 z-50 min-w-40 rounded-md border border-zinc-700 bg-zinc-900 py-1 shadow-lg">
+                        <button
+                            onClick={() => { onToggleAnimation(); setMenuOpen(false); }}
+                            className={`flex w-full items-center gap-2 px-4 py-2 text-sm transition-colors ${
+                                isAnimating
+                                    ? "text-amber-400 hover:bg-zinc-800"
+                                    : "text-zinc-300 hover:bg-zinc-800"
+                            }`}
+                        >
+                            {isAnimating ? "⏸" : "▶"}
+                            {isAnimating ? "Pause" : "Play"}
+                        </button>
+                        <button
+                            onClick={() => setMenuOpen(false)}
+                            className="flex w-full items-center gap-2 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-800 transition-colors"
+                        >
+                            <span className="text-red-400">●</span>
+                            Capture
+                        </button>
+                    </div>
+                )}
             </div>
         </header>
     );

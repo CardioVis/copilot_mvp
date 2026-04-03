@@ -2,27 +2,28 @@
 /**
  * process_features.js
  *
- * Processes feature directories containing frame images and binary mask PNGs.
- * For each project folder, outputs:
- *   1. labels_parsed.json        – Label Studio brush-RLE encoded masks
- *   2. labels_parsed_points.json – Douglas-Peucker simplified contour polygons
+ * Processes a project directory containing frame images and binary mask PNGs.
+ * Outputs:
+ *   1. labels.json        – Label Studio brush-RLE encoded masks
+ *   2. labels_points.json – Douglas-Peucker simplified contour polygons
  *
  * Expected directory structure:
- *   <rootDir>/
- *     <Project>/
- *       frames/               – frame_NNNNNN.png
- *       masks/
- *         class01_<name>/     – class01_NNNNNN.png  (binary 0/255)
- *         class02_<name>/     – class02_NNNNNN.png
- *         ...
- *       json/                 – ann_NNNNNN.json (optional, for class name mapping)
+ *   <projectDir>/
+ *     frames/               – frame_NNNNNN.png
+ *     masks/
+ *       class01_<name>/     – class01_NNNNNN.png  (binary 0/255)
+ *       class02_<name>/     – class02_NNNNNN.png
+ *       ...
+ *     json/                 – ann_NNNNNN.json (optional, for class name mapping)
  *
  * Usage:
- *   node scripts/process_features.js [rootDir] [--epsilon=2]
+ *   node scripts/process_features.js [projectDir] [--epsilon=2] [--start=N] [--end=N]
  *
  * Defaults:
- *   rootDir → D:\Projects\Features
- *   epsilon → 2 (Douglas-Peucker tolerance in pixels)
+ *   projectDir → D:\Projects\Features
+ *   epsilon    → 7 (Douglas-Peucker tolerance in pixels)
+ *   start      → 0 (first frame)
+ *   end        → (last frame)
  */
 
 const fs = require("fs");
@@ -40,8 +41,23 @@ for (const a of args) {
   else if (!a.startsWith("--")) positional.push(a);
 }
 
-const rootDir = path.resolve(positional[0] ?? "D:\\Projects\\Features");
-const EPSILON = parseFloat(flags.epsilon ?? "2");
+const projectDir = path.resolve(positional[0] ?? "D:\\Projects\\Features");
+const EPSILON = parseFloat(flags.epsilon ?? "7");
+const startFrame = flags.start !== undefined ? parseInt(flags.start, 10) : null;
+const endFrame = flags.end !== undefined ? parseInt(flags.end, 10) : null;
+
+if (startFrame !== null && (isNaN(startFrame) || startFrame < 0)) {
+  console.error(`Error: invalid --start value: ${flags.start}`);
+  process.exit(1);
+}
+if (endFrame !== null && (isNaN(endFrame) || endFrame < 0)) {
+  console.error(`Error: invalid --end value: ${flags.end}`);
+  process.exit(1);
+}
+if (startFrame !== null && endFrame !== null && startFrame > endFrame) {
+  console.error(`Error: --start (${startFrame}) must be <= --end (${endFrame})`);
+  process.exit(1);
+}
 
 // ── Bit Stream Writer (reverse of BitInputStream in parse_rle.js) ─────────
 
@@ -359,15 +375,20 @@ function processProject(projectDir) {
   console.log(`  Classes: ${classFolders.map((f) => `${f} → "${classNames[f]}"`).join(", ")}`);
 
   // List frame files sorted
-  const frameFiles = fs.readdirSync(framesDir)
+  let frameFiles = fs.readdirSync(framesDir)
     .filter((f) => /\.(png|jpg|jpeg)$/i.test(f))
     .sort();
+
+  if (startFrame !== null || endFrame !== null) {
+    frameFiles = frameFiles.slice(startFrame ?? 0, endFrame !== null ? endFrame + 1 : undefined);
+  }
 
   console.log(`  ${frameFiles.length} frame(s), ${classFolders.length} class(es)`);
 
   const rleOutput = [];
   const pointsOutput = [];
   let recordId = 0;
+  const jsonDir = path.join(projectDir, "json");
 
   for (const frameFile of frameFiles) {
     // Extract frame number from filename
@@ -376,8 +397,9 @@ function processProject(projectDir) {
     const frameNum = frameNumMatch[1];
 
     const rleEntry = { id: recordId, image: frameFile, tags: [] };
-    const pointsEntry = { id: recordId, image: frameFile, zones: [] };
+    const pointsEntry = { id: recordId, image: frameFile, zones: [], lines: [] };
     let hasData = false;
+    let frameWidth = 0, frameHeight = 0;
 
     for (const classFolder of classFolders) {
       const label = classNames[classFolder];
@@ -389,6 +411,7 @@ function processProject(projectDir) {
 
       try {
         const { mask, width, height } = readMaskPNG(maskPath);
+        if (!frameWidth) { frameWidth = width; frameHeight = height; }
 
         // Count foreground pixels
         let fgCount = 0;
@@ -421,6 +444,51 @@ function processProject(projectDir) {
       }
     }
 
+    // ── Process line annotations from json/ann_NNNNNN.json ──────────────────
+    const annFile = path.join(jsonDir, `ann_${frameNum}.json`);
+    if (fs.existsSync(annFile)) {
+      try {
+        const ann = JSON.parse(fs.readFileSync(annFile, "utf8"));
+
+        // Fall back to reading the frame PNG for dimensions if no masks existed
+        if (!frameWidth) {
+          // Try image_size field first (fast)
+          if (ann.image_size && ann.image_size.width) {
+            frameWidth = ann.image_size.width;
+            frameHeight = ann.image_size.height;
+          } else {
+            try {
+              const buf = fs.readFileSync(path.join(framesDir, frameFile));
+              const png = PNG.sync.read(buf);
+              frameWidth = png.width;
+              frameHeight = png.height;
+            } catch { /* leave at 0 */ }
+          }
+        }
+
+        if (frameWidth && frameHeight) {
+          // centerline_segments: array of segments, each segment is [[x,y], [x,y], ...]
+          if (Array.isArray(ann.centerline_segments) && ann.centerline_segments.length > 0) {
+            // Always keep only the longest segment
+            const longestSeg = ann.centerline_segments
+              .filter((s) => Array.isArray(s) && s.length >= 2)
+              .reduce((best, seg) => (seg.length > best.length ? seg : best), []);
+
+            if (longestSeg.length >= 2) {
+              const pts = longestSeg.map((p) => ({ x: p[0], y: p[1] }));
+              const simplified = douglasPeucker(pts, EPSILON);
+              const normalized = normalizePoints(simplified, frameWidth, frameHeight);
+              pointsEntry.lines.push({ label: "Incision", points: normalized });
+              console.log(`  ${frameFile} / line "Incision": ${pts.length} → ${simplified.length} pts`);
+              hasData = true;
+            }
+          }
+        }
+      } catch (err) {
+        console.log(`  WARN: Could not read ${annFile}: ${err.message}`);
+      }
+    }
+
     if (hasData) {
       rleOutput.push(rleEntry);
       pointsOutput.push(pointsEntry);
@@ -442,28 +510,18 @@ function processProject(projectDir) {
 
 // ── Main ──────────────────────────────────────────────────────────────────
 
-if (!fs.existsSync(rootDir)) {
-  console.error(`Root directory not found: "${rootDir}"`);
+if (!fs.existsSync(projectDir)) {
+  console.error(`Project directory not found: "${projectDir}"`);
   process.exit(1);
 }
 
-console.log(`Root: ${rootDir}`);
-console.log(`Epsilon: ${EPSILON}\n`);
-
-const projects = fs.readdirSync(rootDir)
-  .filter((f) => fs.statSync(path.join(rootDir, f)).isDirectory())
-  .sort();
-
-if (projects.length === 0) {
-  console.error("No project directories found.");
-  process.exit(1);
+console.log(`Project: ${projectDir}`);
+console.log(`Epsilon: ${EPSILON}`);
+if (startFrame !== null || endFrame !== null) {
+  console.log(`Range  : frames ${startFrame ?? 0} → ${endFrame ?? "end"}`);
 }
+console.log();
 
-console.log(`Found ${projects.length} project(s): ${projects.join(", ")}\n`);
-
-for (const project of projects) {
-  console.log(`\n══ ${project} ══`);
-  processProject(path.join(rootDir, project));
-}
+processProject(projectDir);
 
 console.log("\nDone.");

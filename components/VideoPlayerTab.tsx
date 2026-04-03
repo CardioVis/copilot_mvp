@@ -4,9 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   renderBoundaryOverlay,
   renderSegmentationOverlay,
+  renderLinesOverlay,
   getLabelColor,
   BoundaryZone,
   BoundaryRecord,
+  LineAnnotation,
   LabelColor,
   SegmentationTag,
 } from "@/lib/rleDecoder";
@@ -18,6 +20,7 @@ interface FrameLabels {
   /** frame number extracted from image name */
   frameNum: number;
   zones: BoundaryZone[];
+  lines: LineAnnotation[];
 }
 
 interface FrameRleLabels {
@@ -38,6 +41,7 @@ export default function VideoPlayerTab() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showOverlay, setShowOverlay] = useState(true);
+  const [showSafeZones, setShowSafeZones] = useState(false);
   const [fps, setFps] = useState(18);
   const [currentFrame, setCurrentFrame] = useState<string>("");
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
@@ -47,10 +51,15 @@ export default function VideoPlayerTab() {
   const [currentZoneNames, setCurrentZoneNames] = useState<Set<string>>(new Set());
   const objectUrlRef = useRef<string | null>(null);
   const labelsCanvasRef = useRef<HTMLCanvasElement>(null);
+  const linesCanvasRef = useRef<HTMLCanvasElement>(null);
   const lastLabelFrameIndexRef = useRef<number>(-1);
+  const lastLinesFrameIndexRef = useRef<number>(-1);
   const animManagerRef = useRef(new BoundaryAnimationManager());
 
   const [showLabels, setShowLabels] = useState(false);
+  const [showLines, setShowLines] = useState(true);
+  const [showToolbars, setShowToolbars] = useState(true);
+  const [isMouseOverVideo, setIsMouseOverVideo] = useState(false);
   const [frameRleLabels, setFrameRleLabels] = useState<FrameRleLabels[]>([]);
 
   // Derive Zone[] from all frame labels for SideBar
@@ -77,7 +86,7 @@ export default function VideoPlayerTab() {
     const parsed: FrameLabels[] = records.map((rec) => {
       const match = rec.image.match(/(\d+)/);
       const frameNum = match ? parseInt(match[1], 10) : 0;
-      return { frameNum, zones: rec.zones };
+      return { frameNum, zones: rec.zones, lines: rec.lines ?? [] };
     });
     parsed.sort((a, b) => a.frameNum - b.frameNum);
     return parsed;
@@ -295,8 +304,43 @@ export default function VideoPlayerTab() {
     const visibleLabels = new Set(zones.map((z) => z.label));
     animManagerRef.current.update(visibleLabels, video.currentTime);
 
-    renderBoundaryOverlay(canvas, zones, dimensions.width || 1920, dimensions.height || 1080, animManagerRef.current);
-  }, [showOverlay, getZonesForTime, dimensions, fps, frameLabels]);
+    renderBoundaryOverlay(canvas, zones, dimensions.width || 1920, dimensions.height || 1080, animManagerRef.current, showSafeZones);
+  }, [showOverlay, getZonesForTime, dimensions, fps, frameLabels, showSafeZones]);
+
+  // Render line annotations overlay
+  const renderLinesOverlayCallback = useCallback(() => {
+    const video = videoRef.current;
+    const canvas = linesCanvasRef.current;
+    if (!canvas) return;
+
+    if (!video || !videoSrc || !showLines || frameLabels.length === 0) {
+      if (lastLinesFrameIndexRef.current !== -1) {
+        const ctx = canvas.getContext("2d");
+        ctx?.clearRect(0, 0, canvas.width, canvas.height);
+        lastLinesFrameIndexRef.current = -1;
+      }
+      return;
+    }
+
+    const frameIndex = Math.round(video.currentTime * fps);
+    const idx = Math.min(Math.max(frameIndex, 0), frameLabels.length - 1);
+    if (idx === lastLinesFrameIndexRef.current) return;
+    lastLinesFrameIndexRef.current = idx;
+
+    const entry = frameLabels[idx];
+    if (!entry || entry.lines.length === 0) {
+      const ctx = canvas.getContext("2d");
+      ctx?.clearRect(0, 0, canvas.width, canvas.height);
+      return;
+    }
+
+    renderLinesOverlay(
+      canvas,
+      entry.lines,
+      dimensions.width || 1920,
+      dimensions.height || 1080
+    );
+  }, [showLines, frameLabels, fps, dimensions, videoSrc]);
 
   // Render RLE segmentation labels on the labels canvas
   const renderLabelsOverlay = useCallback(() => {
@@ -344,6 +388,7 @@ export default function VideoPlayerTab() {
       if (!running) return;
       renderOverlay();
       renderLabelsOverlay();
+      renderLinesOverlayCallback();
       if (video) setCurrentTime(video.currentTime);
       animFrameRef.current = requestAnimationFrame(tick);
     }
@@ -353,7 +398,7 @@ export default function VideoPlayerTab() {
       running = false;
       cancelAnimationFrame(animFrameRef.current);
     };
-  }, [videoSrc, renderOverlay, renderLabelsOverlay]);
+  }, [videoSrc, renderOverlay, renderLabelsOverlay, renderLinesOverlayCallback]);
 
   // Play / Pause
   const togglePlay = useCallback(() => {
@@ -369,11 +414,26 @@ export default function VideoPlayerTab() {
     }
   }, []);
 
+  // Keyboard shortcut: Space or K toggles play/pause
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      if (e.key === " " || e.key === "k" || e.key === "K") {
+        e.preventDefault();
+        togglePlay();
+      }
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [togglePlay]);
+
   const handleVideoEnded = useCallback(() => setPlaying(false), []);
 
   return (
     <main className="flex flex-1 flex-col overflow-hidden bg-zinc-950">
       {/* Header bar */}
+      {showToolbars && (
       <div className="flex items-center gap-3 border-b border-zinc-800 px-4 py-2">
         <span className="text-xs font-medium uppercase tracking-wider text-zinc-500 shrink-0">
           Video Player
@@ -419,6 +479,19 @@ export default function VideoPlayerTab() {
               {showOverlay ? "Hide Boundary" : "Show Boundary"}
             </button>
 
+            {showOverlay && (
+              <button
+                onClick={() => setShowSafeZones((v) => !v)}
+                className={`rounded border px-3 py-1 text-xs font-medium transition-colors whitespace-nowrap ${
+                  showSafeZones
+                    ? "border-green-500 bg-green-500/20 text-green-300"
+                    : "border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100"
+                }`}
+              >
+                {showSafeZones ? "Hide Safe Zones" : "Show Safe Zones"}
+              </button>
+            )}
+
             {frameRleLabels.length > 0 && (
               <button
                 onClick={() => setShowLabels((v) => !v)}
@@ -429,6 +502,19 @@ export default function VideoPlayerTab() {
                 }`}
               >
                 {showLabels ? "Hide Labels" : "Show Labels"}
+              </button>
+            )}
+
+            {frameLabels.some((f) => f.lines.length > 0) && (
+              <button
+                onClick={() => setShowLines((v) => !v)}
+                className={`rounded border px-3 py-1 text-xs font-medium transition-colors whitespace-nowrap ${
+                  showLines
+                    ? "border-orange-500 bg-orange-500/20 text-orange-300"
+                    : "border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100"
+                }`}
+              >
+                {showLines ? "Hide Lines" : "Show Lines"}
               </button>
             )}
 
@@ -453,6 +539,7 @@ export default function VideoPlayerTab() {
           </>
         )}
       </div>
+      )}
 
       {/* Error display */}
       {error && (
@@ -484,7 +571,29 @@ export default function VideoPlayerTab() {
               <div
                 ref={containerRef}
                 className="absolute inset-0"
+                onMouseEnter={() => setIsMouseOverVideo(true)}
+                onMouseLeave={() => setIsMouseOverVideo(false)}
               >
+                {/* Toolbar toggle button */}
+                <button
+                  onClick={() => setShowToolbars((v) => !v)}
+                  title={showToolbars ? "Hide toolbars" : "Show toolbars"}
+                  className="absolute top-2 right-2 z-10 flex h-7 w-7 items-center justify-center rounded bg-black/50 text-zinc-400 hover:bg-black/70 hover:text-zinc-100 transition-colors"
+                >
+                  {showToolbars ? (
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <rect x="3" y="4" width="18" height="3" rx="1" fill="currentColor" stroke="none" />
+                      <rect x="3" y="17" width="18" height="3" rx="1" fill="currentColor" stroke="none" />
+                      <line x1="7" y1="12" x2="17" y2="12" strokeLinecap="round" />
+                    </svg>
+                  ) : (
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <rect x="3" y="4" width="18" height="3" rx="1" fill="currentColor" stroke="none" opacity="0.4" />
+                      <rect x="3" y="17" width="18" height="3" rx="1" fill="currentColor" stroke="none" opacity="0.4" />
+                      <line x1="7" y1="12" x2="17" y2="12" strokeLinecap="round" />
+                    </svg>
+                  )}
+                </button>
                 <video
                   ref={videoRef}
                   src={videoSrc}
@@ -506,8 +615,14 @@ export default function VideoPlayerTab() {
                   className="absolute inset-0 w-full h-full pointer-events-none object-contain"
                   style={{ mixBlendMode: "normal" }}
                 />
+                <canvas
+                  ref={linesCanvasRef}
+                  className="absolute inset-0 w-full h-full pointer-events-none object-contain"
+                  style={{ mixBlendMode: "normal" }}
+                />
 
-                {/* Play/Pause overlay button */}
+                {/* Play/Pause overlay button — only visible when mouse is over the video */}
+                {isMouseOverVideo && (
                 <button
                   onClick={togglePlay}
                   className="absolute inset-0 flex items-center justify-center bg-transparent group"
@@ -531,6 +646,7 @@ export default function VideoPlayerTab() {
                     )}
                   </div>
                 </button>
+                )}
               </div>
             </div>
           ) : (
@@ -552,7 +668,7 @@ export default function VideoPlayerTab() {
           )}
 
           {/* Playback controls bar */}
-          {videoSrc && (
+          {videoSrc && showToolbars && (
             <div className="flex items-center gap-3 border-t border-zinc-800 px-4 py-2">
               <button
                 onClick={togglePlay}

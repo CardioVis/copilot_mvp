@@ -84,3 +84,46 @@ export const segmentationMask = {
   /** Fill opacity applied to all RLE mask pixels (0–1). */
   opacity: 0.45,
 };
+
+// ── Annotation line (open polyline, e.g. Centerline) ─────────────────────────
+
+export const annotationLine = {
+  /**
+   * Fixed stroke width in pixels.
+   * Set to 0 to auto-scale: computedWidth = max(minWidth, round(canvasWidth / autoScaleDivisor))
+   */
+  lineWidth: 4,
+
+  /** Divisor for auto-scaling line width. */
+  autoScaleDivisor: 320,
+
+  /** Minimum stroke width when auto-scaling (px). */
+  minWidth: 3,
+
+  /** Stroke style: "solid" or "dashed". */
+  style: "dashed" as "solid" | "dashed",
+
+  /** Length of each dash in pixels (only used when style === "dashed"). */
+  dashLength: 24,
+
+  /** Length of each gap in pixels (only used when style === "dashed"). */
+  gapLength: 8,
+
+  /** Stroke opacity (0–1). */
+  opacity: 1,
+
+  /** Whether to draw a label badge at the line midpoint. */
+  showLabel: false,
+
+  /** Gradient area rendered around the line, similar to safe-zone area bands. */
+  area: {
+    /** Number of concentric band passes (0 = disabled). */
+    bands: 4,
+    /** Outer edge color (CSS hex). */
+    outerColor: "#facc15",
+    /** Total band thickness in pixels (outer edge width). */
+    width: 480,
+    /** Peak opacity of the innermost band. */
+    opacity: 0.12,
+  },
+};
