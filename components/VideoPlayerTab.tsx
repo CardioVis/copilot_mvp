@@ -55,6 +55,7 @@ export default function VideoPlayerTab() {
   const lastLabelFrameIndexRef = useRef<number>(-1);
   const lastLinesFrameIndexRef = useRef<number>(-1);
   const animManagerRef = useRef(new BoundaryAnimationManager());
+  const linesAnimManagerRef = useRef(new BoundaryAnimationManager());
 
   const [showLabels, setShowLabels] = useState(false);
   const [showLines, setShowLines] = useState(true);
@@ -247,6 +248,12 @@ export default function VideoPlayerTab() {
 
   useEffect(() => () => revokeObjectUrl(), []);
 
+  // Auto-load from the default directory on mount
+  useEffect(() => {
+    loadFromServer();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleVideoLoaded = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -331,14 +338,19 @@ export default function VideoPlayerTab() {
     if (!entry || entry.lines.length === 0) {
       const ctx = canvas.getContext("2d");
       ctx?.clearRect(0, 0, canvas.width, canvas.height);
+      linesAnimManagerRef.current.update(new Set(), video.currentTime);
       return;
     }
+
+    const visibleLineLabels = new Set(entry.lines.map((l) => l.label));
+    linesAnimManagerRef.current.update(visibleLineLabels, video.currentTime);
 
     renderLinesOverlay(
       canvas,
       entry.lines,
       dimensions.width || 1920,
-      dimensions.height || 1080
+      dimensions.height || 1080,
+      linesAnimManagerRef.current
     );
   }, [showLines, frameLabels, fps, dimensions, videoSrc]);
 

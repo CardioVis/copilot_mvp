@@ -14,7 +14,7 @@ import {
 } from "./overlayConfig";
 import type { ZoneRenderHint } from "./BoundaryAnimationManager";
 import { classifyZone, BoundaryAnimationManager } from "./BoundaryAnimationManager";
-import { SafeZone, DangerZone } from "./types";
+import { SafeZone, DangerZone, OtherZone } from "./types";
 
 /** Parse a CSS hex color string into an RGB triple. */
 function hexToRgb(hex: string): LabelColor {
@@ -26,9 +26,11 @@ function hexToRgb(hex: string): LabelColor {
 // is automatically reflected here.
 const _safe = new SafeZone("", "");
 const _danger = new DangerZone("", "");
+const _other = new OtherZone("", "");
 const CLASSIFIED_COLORS: Record<string, LabelColor> = {
   danger:  hexToRgb(_danger.color),
   safe:    hexToRgb(_safe.color),
+  other:   hexToRgb(_other.color), 
   unknown: { r: 180, g: 100, b: 255 },
 };
 
@@ -107,8 +109,8 @@ const KNOWN_COLORS: Record<string, LabelColor> = {
   "Phrenic nerve": { r: 50, g: 150, b: 255 },
   Grasper: { r: 50, g: 220, b: 100 },
   Pericardium: { r: 255, g: 80, b: 80 },
-  "Epicardial adipose tissue": { r: 255, g: 220, b: 50 },
-  Incision: { r: 50, g: 220, b: 80 },
+  "Epicardial adipose tissue": { r: 249, g: 115, b: 22 },
+  "Incision line": { r: 50, g: 220, b: 80 },
   Centerline: { r: 50, g: 220, b: 80 },
 };
 
@@ -395,7 +397,7 @@ export function renderBoundaryOverlay(
 
     // Apply scale transform around the smoothed label centre
     ctx.save();
-    ctx.translate(smoothed.x - width * 0.015, smoothed.y + height * 0.015);
+    ctx.translate(smoothed.x - width * 0.015, smoothed.y + height * 0.04);
     ctx.scale(scale, scale);
 
     const m = ctx.measureText(zone.label);
@@ -426,7 +428,7 @@ export function renderBoundaryOverlay(
       // Scale the SVG triangle (14×13 px at fontSize≈12) to match the canvas badge height
       const svgH = 13; // tip(-8) to base(+5) in SVG space
       // Slightly smaller than before so the triangle sits comfortably next to the badge
-      const scale2 = (bh / svgH) * 0.5;
+      const scale2 = (bh / svgH) * 0.7;
 
       // Triangle vertices in SVG space: tip at (0,-8), br at (7,5), bl at (-7,5)
       // Place centroid to the left of the badge with an 8px gap
@@ -479,6 +481,7 @@ export function renderLinesOverlay(
   lines: LineAnnotation[],
   width = MASK_WIDTH,
   height = MASK_HEIGHT,
+  animManager?: BoundaryAnimationManager,
 ): void {
   canvas.width = width;
   canvas.height = height;
@@ -546,22 +549,40 @@ export function renderLinesOverlay(
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Label badge at midpoint
+    // Label badge at midpoint — styled like zone labels
     if (!annotationLine.showLabel) continue;
     const mid = line.points[Math.floor(line.points.length / 2)];
-    const mx = mid.x * (width - 1) - width * 0.015;
-    const my = mid.y * (height - 1) + height * 0.015;
+    const rawMx = mid.x * (width - 1) - width * 0.12;
+    const rawMy = mid.y * (height - 1) + height * 0.04;
+    const smoothed = animManager
+      ? animManager.smoothCentroid(line.label, rawMx, rawMy)
+      : { x: rawMx, y: rawMy };
+    const mx = smoothed.x;
+    const my = smoothed.y;
     ctx.font = `${fontSize}px system-ui, sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     const m = ctx.measureText(line.label);
     const bw = m.width + overlayLabel.paddingX * 2;
     const bh = fontSize + overlayLabel.paddingY * 2;
+
+    ctx.save();
+    ctx.translate(mx, my);
+
     ctx.fillStyle = `rgba(0,0,0,${overlayLabel.backgroundOpacity})`;
     ctx.beginPath();
-    ctx.roundRect(mx - bw / 2, my - bh / 2, bw, bh, overlayLabel.borderRadius);
+    ctx.roundRect(-bw / 2, -bh / 2, bw, bh, overlayLabel.borderRadius);
     ctx.fill();
-    ctx.fillStyle = `rgba(${color.r},${color.g},${color.b},1)`;
-    ctx.fillText(line.label, mx, my);
+
+    ctx.strokeStyle = `rgba(0,0,0,0)`;
+    ctx.lineWidth = overlayLabel.borderWidth;
+    ctx.beginPath();
+    ctx.roundRect(-bw / 2, -bh / 2, bw, bh, overlayLabel.borderRadius);
+    ctx.stroke();
+
+    ctx.fillStyle = `rgba(255,255,255,1)`;
+    ctx.fillText(line.label, 0, 0);
+
+    ctx.restore();
   }
 }

@@ -34,8 +34,9 @@ export default function SideBar({
 
   const [editorOpen, setEditorOpen] = useState(false);
 
-  const dangerZones = zones.filter((z) => classifyZone(z.name) === "danger");
-  const safeClassifiedZones = zones.filter((z) => classifyZone(z.name) === "safe");
+  const dangerZonesClassified = zones.filter((z) => classifyZone(z.name) === "danger");
+  const safeZonesClassified = zones.filter((z) => classifyZone(z.name) === "safe");
+  const otherZonesClassified = zones.filter((z) => classifyZone(z.name) === "other");
 
   return (
     <aside className="flex h-full w-64 flex-shrink-0 flex-col border-r border-zinc-800 bg-zinc-950">
@@ -46,7 +47,7 @@ export default function SideBar({
             Danger Zones
           </h3>
           <div className="mt-2">
-            <DangerZonesContent zones={dangerZones} />
+            <DangerZonesContent zones={dangerZonesClassified} />
           </div>
         </div>
         <div>
@@ -54,7 +55,15 @@ export default function SideBar({
             Safe Zones
           </h3>
           <div className="mt-2">
-            <SafeZonesContent zones={safeClassifiedZones} safeZones={safeZones} />
+            <SafeZonesContent zones={safeZonesClassified} safeZones={safeZones} />
+          </div>
+        </div>
+        <div>
+          <h3 className="py-1 text-xs font-medium uppercase tracking-wider text-zinc-500">
+            Other
+          </h3>
+          <div className="mt-2">
+            <OtherZonesContent zones={otherZonesClassified} />
           </div>
         </div>
         {showDevTool && (
@@ -130,6 +139,22 @@ function DangerZonesContent({ zones }: { zones: Zone[] }) {
             </div>
           );
         })
+      )}
+    </div>
+  );
+}
+
+function OtherZonesContent({ zones }: { zones: Zone[] }) {
+  return (
+    <div className="space-y-3">
+      {zones.length === 0 ? (
+        <p className="text-xs text-zinc-600">No other zones found.</p>
+      ) : (
+        zones.map((zone) => (
+          <div key={zone.id} className="flex items-center gap-3">
+            <p className="text-sm text-white">{zone.name}</p>
+          </div>
+        ))
       )}
     </div>
   );

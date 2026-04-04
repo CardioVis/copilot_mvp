@@ -153,24 +153,35 @@ export default function ImageGallery() {
     setLoading(true);
     setUseFsApi(false);
     setSelectedIndex(null);
+    const folder = folderName.trim().replace(/[/\\]+$/, "");
+    const framesDir = folder ? folder + "\\frames" : "";
     try {
-      const data = await fetch("/api/images").then((r) => r.json());
+      const url = framesDir
+        ? `/api/images?dir=${encodeURIComponent(framesDir)}`
+        : "/api/images";
+      const data = await fetch(url).then((r) => r.json());
       setImages(data.images ?? []);
     } catch {
       setImages([]);
     } finally {
       setLoading(false);
     }
-    // Load labels.json from public/
+    // Load labels.json from folder or public/
     try {
-      const records = await fetch("/api/labels").then((r) => r.json());
+      const url = folder
+        ? `/api/local-files?dir=${encodeURIComponent(folder)}&file=labels.json`
+        : "/api/labels";
+      const records = await fetch(url).then((r) => r.json());
       if (Array.isArray(records)) loadLabelsFromRecords(records);
     } catch {
       setLabelsMap({});
     }
-    // Load labels_points.json from public/
+    // Load labels_points.json from folder or public/
     try {
-      const records = await fetch("/api/labels-points").then((r) => r.json());
+      const url = folder
+        ? `/api/local-files?dir=${encodeURIComponent(folder)}&file=labels_points.json`
+        : "/api/labels-points";
+      const records = await fetch(url).then((r) => r.json());
       if (Array.isArray(records)) loadBoundaryFromRecords(records);
     } catch {
       setBoundaryMap({});

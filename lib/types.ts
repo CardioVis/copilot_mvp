@@ -69,3 +69,19 @@ export class DangerZone implements Zone {
     public name: string,
   ) {}
 }
+
+/** A polygon zone categorised as "other" (defaults to orange). */
+export class OtherZone implements Zone {
+  color = "#f97316";
+  opacity = 1;
+  points: Point[] = [];
+  visible = true;
+  fillStyle: ZoneFillStyle = "dashed";
+  labelPos?: Point;
+  accuracy?: number;
+
+  constructor(
+    public id: string,
+    public name: string,
+  ) {}
+}

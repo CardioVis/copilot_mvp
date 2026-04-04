@@ -1,15 +1,17 @@
-import { SafeZone, DangerZone, Zone } from "./types";
+import { SafeZone, DangerZone, OtherZone, Zone } from "./types";
 
 // ── Zone classification ───────────────────────────────────────────────────────
 
-const DANGER_LABELS = new Set(["Phrenic nerve", "Epicardial adipose tissue"]);
+const DANGER_LABELS = new Set(["Phrenic nerve"]);
 const SAFE_LABELS = new Set(["Pericardium"]);
+const OTHER_LABELS = new Set(["Epicardial adipose tissue"]);
 
-export type ZoneCategory = "danger" | "safe" | "unknown";
+export type ZoneCategory = "danger" | "safe" | "other" | "unknown";
 
 export function classifyZone(label: string): ZoneCategory {
   if (DANGER_LABELS.has(label)) return "danger";
   if (SAFE_LABELS.has(label)) return "safe";
+  if (OTHER_LABELS.has(label)) return "other";
   return "unknown";
 }
 
@@ -20,6 +22,8 @@ export function createClassifiedZone(label: string): Zone {
       return new DangerZone(label, label);
     case "safe":
       return new SafeZone(label, label);
+    case "other":
+      return new OtherZone(label, label);
     default:
       return new SafeZone(label, label);
   }
@@ -52,7 +56,7 @@ export const animationConfig = {
   /** Label offset-Y during zoom peak (px, negative = upward). */
   labelZoomOffsetY: -10,
   /** Boundary opacity after the flash animation completes (0–1). */
-  steadyOpacity: 0.4,
+  steadyOpacity: 1,
   /** Smoothing factor for label position (0–1). Lower = smoother/slower. */
   labelSmoothingFactor: 0.01,
 };

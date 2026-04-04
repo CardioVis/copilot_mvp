@@ -28,7 +28,7 @@ export const boundaryLine = {
   minWidth: 2,
 
   /** Stroke style: "solid" or "dashed". */
-  style: "dashed" as "solid" | "dashed",
+  style: "solid" as "solid" | "dashed",
 
   /** Length of each dash in pixels (only used when style === "dashed"). */
   dashLength: 24,
@@ -44,7 +44,7 @@ export const boundaryLine = {
 
 export const boundaryFill = {
   /** Semi-transparent fill opacity for the polygon interior (0–1). */
-  opacity: 0,
+  opacity: 0.2,
 };
 
 // ── Label badge (shared by boundary and segmentation overlays) ────────────────
@@ -113,7 +113,7 @@ export const annotationLine = {
   opacity: 1,
 
   /** Whether to draw a label badge at the line midpoint. */
-  showLabel: false,
+  showLabel: true,
 
   /** Gradient area rendered around the line, similar to safe-zone area bands. */
   area: {

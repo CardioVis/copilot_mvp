@@ -478,8 +478,8 @@ function processProject(projectDir) {
               const pts = longestSeg.map((p) => ({ x: p[0], y: p[1] }));
               const simplified = douglasPeucker(pts, EPSILON);
               const normalized = normalizePoints(simplified, frameWidth, frameHeight);
-              pointsEntry.lines.push({ label: "Incision", points: normalized });
-              console.log(`  ${frameFile} / line "Incision": ${pts.length} → ${simplified.length} pts`);
+              pointsEntry.lines.push({ label: "Incision line", points: normalized });
+              console.log(`  ${frameFile} / line "Incision line": ${pts.length} → ${simplified.length} pts`);
               hasData = true;
             }
           }
