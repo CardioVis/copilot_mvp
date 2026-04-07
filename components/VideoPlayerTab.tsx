@@ -67,7 +67,6 @@ export default function VideoPlayerTab({ initialDir = "" }: VideoPlayerTabProps)
   const [fps, setFps] = useState(18);
   const [currentFrame, setCurrentFrame] = useState<string>("");
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
-  const [useFsApi, setUseFsApi] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [currentZoneNames, setCurrentZoneNames] = useState<Set<string>>(new Set());
@@ -182,7 +181,6 @@ export default function VideoPlayerTab({ initialDir = "" }: VideoPlayerTabProps)
       setVideoSrc(
         `/api/video?dir=${encodeURIComponent(dirPath)}`
       );
-      setUseFsApi(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load");
       setVideoSrc(null);
@@ -239,7 +237,6 @@ export default function VideoPlayerTab({ initialDir = "" }: VideoPlayerTabProps)
       objectUrlRef.current = url;
       setVideoSrc(url);
       setDirPath(dirHandle.name);
-      setUseFsApi(true);
 
       // Load RLE masks (optional)
       if (rleMasksHandle) {
@@ -276,7 +273,9 @@ export default function VideoPlayerTab({ initialDir = "" }: VideoPlayerTabProps)
 
   // Auto-load from the default directory on mount
   useEffect(() => {
-    loadFromServer();
+    if (dirPath && dirPath.trim()) {
+      loadFromServer();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -469,25 +468,6 @@ export default function VideoPlayerTab({ initialDir = "" }: VideoPlayerTabProps)
         <span className="text-xs font-medium uppercase tracking-wider text-zinc-500 shrink-0">
           Video Player
         </span>
-
-        {!useFsApi && (
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            <input
-              type="text"
-              value={dirPath}
-              onChange={(e) => setDirPath(e.target.value)}
-              placeholder="Directory path (e.g. D:\Projects\Dataset_new)"
-              className="flex-1 min-w-0 rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-300 placeholder-zinc-600 focus:border-zinc-500 focus:outline-none"
-            />
-            <button
-              onClick={loadFromServer}
-              disabled={loading || !dirPath.trim()}
-              className="rounded border border-zinc-700 bg-zinc-800 px-3 py-1 text-xs font-medium text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100 transition-colors whitespace-nowrap disabled:opacity-50"
-            >
-              {loading ? "Loading…" : "Load"}
-            </button>
-          </div>
-        )}
 
         <button
           onClick={loadFromPicker}

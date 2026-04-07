@@ -35,9 +35,10 @@ export async function GET(req: NextRequest) {
     }
 
     const resolvedDir = path.resolve(dirParam);
-    const filePath = path.join(resolvedDir, file);
+    const framesDir = path.join(resolvedDir, "frames");
+    const filePath = path.join(framesDir, file);
 
-    if (!filePath.startsWith(resolvedDir + path.sep)) {
+    if (!filePath.startsWith(framesDir + path.sep)) {
       return NextResponse.json({ error: "Path traversal detected" }, { status: 403 });
     }
 
@@ -63,12 +64,13 @@ export async function GET(req: NextRequest) {
   let buildSrc: (f: string) => string;
 
   if (dirParam) {
-    framesDir = path.resolve(dirParam);
-    if (!path.isAbsolute(framesDir)) {
+    const resolvedFeatureDir = path.resolve(dirParam);
+    if (!path.isAbsolute(resolvedFeatureDir)) {
       return NextResponse.json({ error: "Invalid directory" }, { status: 400 });
     }
+    framesDir = path.join(resolvedFeatureDir, "frames");
     buildSrc = (f: string) =>
-      `/api/images?dir=${encodeURIComponent(framesDir)}&file=${encodeURIComponent(f)}`;
+      `/api/images?dir=${encodeURIComponent(resolvedFeatureDir)}&file=${encodeURIComponent(f)}`;
   } else {
     framesDir = path.join(process.cwd(), "public", "frames");
     buildSrc = (f: string) => `/frames/${f}`;

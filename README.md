@@ -83,9 +83,10 @@ Expected directory layout:
 
 ```
 <galleryDir>/
-  frame_000001.png    — frame images (any supported extension)
-  frame_000002.png
-  ...
+  frames/
+    frame_000001.png  — frame images (any supported extension)
+    frame_000002.png
+    ...
   masks.json          — RLE segmentation masks (optional)
   points.json         — boundary polygons and line annotations (optional)
 ```
@@ -98,26 +99,22 @@ Expected directory layout:
 ```json
 [
   {
-    "image": "frame_000001.png",
-    "zones": [
-      { "label": "aorta", "points": [[{"x": 0.1, "y": 0.2}, ...]] }
-    ],
-    "lines": [
-      { "label": "incision", "points": [{"x": 0.3, "y": 0.4}, ...] }
-    ]
+    "id": 0,
+    "image": "frame_000000.png",
+    "zones": [{ "label": "Phrenic nerve", "points": [[{"x": 0.4, "y": 0.3}, ...] }], [...]],
+    "lines": [{ "label": "Incision line", "points": [{"x": 0.1, "y": 0.5}, ...] }]
   }
 ]
 ```
-Points are normalised to `[0, 1]`. `zones[].points` is an array of polygon rings (array of arrays); `lines[].points` is a flat array.
+Points are normalised to `[0, 1]` relative to the image dimensions. `zones[].points` is an array of polygon rings (array of arrays); `lines[].points` is a flat array.
 
-**`masks.json`** — array of per-frame records with Label Studio brush-RLE encoded masks:
+**`masks.json`** — RLE segmentation masks per frame:
 ```json
 [
   {
-    "image": "frame_000001.png",
-    "tags": [
-      { "brushlabels": ["aorta"], "rle": [...], "width": 640, "height": 480 }
-    ]
+    "id": 0,
+    "image": "frame_000000.png",
+    "tags": [{ "label": "Phrenic nerve", "rle": [12345, ...] }]
   }
 ]
 ```
@@ -191,7 +188,7 @@ scripts/
   frames_to_video.js      Assemble frames/ folder → footage.mp4 via ffmpeg
 
 google-apps-script.js     Google Apps Script (doGet/doPost) for optional Drive-based zone file sync
-```
+
   BoundaryAnimationManager.ts  Per-zone animation state machine for video overlay (flash, zoom, smoothing)
   rleDecoder.ts           Label Studio RLE decoder; canvas renderers for segmentation, boundary, and line overlays
   services/
@@ -204,33 +201,6 @@ scripts/                  Standalone Node.js data-processing CLI tools
   frames_to_video.js      Concatenate frame images to footage.mp4 using ffmpeg
   copy_postfix.js         Rename/copy files by postfix (dataset organisation utility)
 ```
-
----
-
-## Data Formats
-
-**`labels_points.json`** — boundary polygons per frame:
-```json
-[
-  {
-    "image": "frame_0001.png",
-    "zones": [{ "label": "Phrenic nerve", "points": [{"x": 0.4, "y": 0.3}, ...] }],
-    "lines": [{ "label": "Incision line", "points": [{"x": 0.1, "y": 0.5}, ...] }]
-  }
-]
-```
-
-**`labels.json`** — RLE segmentation masks per frame:
-```json
-[
-  {
-    "image": "frame_0001.png",
-    "tags": [{ "label": "Phrenic nerve", "rle": [12345, ...] }]
-  }
-]
-```
-
-Zone coordinates are normalised to `[0, 1]` relative to the image dimensions.
 
 ---
 

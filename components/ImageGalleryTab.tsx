@@ -54,7 +54,6 @@ export default function ImageGalleryTab({
   const [loading, setLoading] = useState(true);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [folderName, setFolderName] = useState(initialDir);
-  const [useFsApi, setUseFsApi] = useState(false);
   const objectUrlsRef = useRef<string[]>([]);
 
   // Segmentation overlay state
@@ -136,7 +135,15 @@ export default function ImageGalleryTab({
   }
 
   useEffect(() => {
-    loadDefault();
+    const folder = folderName.trim();
+    if (folder) {
+      loadDefault();
+    } else {
+      // No default gallery dir — load server-provided records only and skip directory checks
+      if (initialMasks.length > 0) loadMasksFromRecords(initialMasks);
+      if (initialPoints.length > 0) loadBoundaryFromRecords(initialPoints);
+      setLoading(false);
+    }
     return () => revokeAll();
   }, []);
 
@@ -211,13 +218,11 @@ export default function ImageGalleryTab({
    */
   async function loadDefault() {
     setLoading(true);
-    setUseFsApi(false);
     setSelectedIndex(null);
     const folder = folderName.trim().replace(/[/\\]+$/, "");
-    const framesDir = folder ? folder + "\\frames" : "";
     try {
-      const url = framesDir
-        ? `/api/images?dir=${encodeURIComponent(framesDir)}`
+      const url = folder
+        ? `/api/images?dir=${encodeURIComponent(folder)}`
         : "/api/images";
       const data = await fetch(url).then((r) => r.json());
       setImages(data.images ?? []);
@@ -296,9 +301,13 @@ export default function ImageGalleryTab({
       }
 
       // Read images from the frames subfolder
-      const imageSource = framesHandle ?? dirHandle;
+      if (!framesHandle) {
+        setImages([]);
+        setLoading(false);
+        return;
+      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      for await (const [name, handle] of (imageSource as any).entries()) {
+      for await (const [name, handle] of (framesHandle as any).entries()) {
         if (handle.kind !== "file") continue;
         const ext = name.split(".").pop()?.toLowerCase() ?? "";
         if (!IMAGE_EXTENSIONS.has(ext)) continue;
@@ -311,7 +320,6 @@ export default function ImageGalleryTab({
       newImages.sort((a, b) => a.name.localeCompare(b.name));
       setImages(newImages);
       setFolderName(dirHandle.name + "/");
-      setUseFsApi(true);
 
       // Load masks.json from the chosen folder
       if (masksHandle) {
@@ -355,25 +363,6 @@ export default function ImageGalleryTab({
         <span className="text-xs font-medium uppercase tracking-wider text-zinc-500 shrink-0">
           Image Gallery
         </span>
-
-        {!useFsApi && (
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            <input
-              type="text"
-              value={folderName}
-              onChange={(e) => setFolderName(e.target.value)}
-              placeholder="Folder path (e.g. public/frames)"
-              className="flex-1 min-w-0 rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-300 placeholder-zinc-600 focus:border-zinc-500 focus:outline-none"
-            />
-            <button
-              onClick={loadDefault}
-              disabled={loading || !folderName.trim()}
-              className="rounded border border-zinc-700 bg-zinc-800 px-3 py-1 text-xs font-medium text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100 transition-colors whitespace-nowrap disabled:opacity-50"
-            >
-              {loading ? "Loading…" : "Load"}
-            </button>
-          </div>
-        )}
 
         <button
           onClick={handleChooseFolder}
