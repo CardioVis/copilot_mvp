@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { renderSegmentationOverlay, renderBoundaryOverlay, renderLinesOverlay, SegmentationTag, BoundaryZone, BoundaryRecord, LineAnnotation } from "@/lib/rleDecoder";
+import { renderBoundaryOverlay, renderLinesOverlay, BoundaryZone, BoundaryRecord, LineAnnotation } from "@/lib/boundaryOverlay";
+import { renderSegmentationOverlay, SegmentationTag } from "@/lib/segmentationOverlay";
 
 interface ImageEntry {
   name: string;

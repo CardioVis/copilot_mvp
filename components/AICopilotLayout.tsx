@@ -4,7 +4,8 @@ import { useState } from "react";
 import TaskBar, { AppTab } from "@/components/TaskBar";
 import ImageGalleryTab from "@/components/ImageGalleryTab";
 import VideoPlayerTab from "@/components/VideoPlayerTab";
-import type { BoundaryRecord, SegmentationTag } from "@/lib/rleDecoder";
+import type { BoundaryRecord } from "@/lib/boundaryOverlay";
+import type { SegmentationTag } from "@/lib/segmentationOverlay";
 
 interface AICopilotLayoutProps {
   initialLabels: Array<{ image: string; tags: SegmentationTag[] }>;

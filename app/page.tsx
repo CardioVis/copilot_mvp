@@ -1,7 +1,8 @@
 import { readFile } from "fs/promises";
 import path from "path";
 import AICopilotLayout from "@/components/AICopilotLayout";
-import type { BoundaryRecord, SegmentationTag } from "@/lib/rleDecoder";
+import type { BoundaryRecord } from "@/lib/boundaryOverlay";
+import type { SegmentationTag } from "@/lib/segmentationOverlay";
 
 export default async function Home() {
   const defaultVideoDir = process.env.DEFAULT_VIDEO_DIR ?? "";

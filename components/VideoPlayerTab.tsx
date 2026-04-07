@@ -3,15 +3,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   renderBoundaryOverlay,
-  renderSegmentationOverlay,
   renderLinesOverlay,
-  getLabelColor,
   BoundaryZone,
   BoundaryRecord,
   LineAnnotation,
-  LabelColor,
+} from "@/lib/boundaryOverlay";
+import {
+  renderSegmentationOverlay,
   SegmentationTag,
-} from "@/lib/rleDecoder";
+} from "@/lib/segmentationOverlay";
+import { getLabelColor, type LabelColor } from "@/lib/rleDecoder";
 import SideBar from "@/components/SideBar";
 import { Zone } from "@/lib/types";
 import { BoundaryAnimationManager } from "@/lib/BoundaryAnimationManager";
@@ -84,18 +85,17 @@ export default function VideoPlayerTab({ initialDir = "" }: VideoPlayerTabProps)
   const [frameRleLabels, setFrameRleLabels] = useState<FrameRleLabels[]>([]);
 
   // Derive Zone[] from all frame labels for SideBar.
-  // Counts how many frames each zone label appears in, then sorts zones by
-  // descending frequency (most frequent first).
+  // Collect unique zone names and sort them alphabetically by name.
   const detectedZones = useMemo((): Zone[] => {
     if (frameLabels.length === 0) return [];
-    const countMap = new Map<string, number>();
+    const labelsSet = new Set<string>();
     for (const frame of frameLabels) {
       for (const zone of frame.zones) {
-        countMap.set(zone.label, (countMap.get(zone.label) ?? 0) + 1);
+        labelsSet.add(zone.label);
       }
     }
-    const entries = Array.from(countMap.keys()).map((label) => createClassifiedZone(label));
-    entries.sort((a, b) => (countMap.get(b.id) ?? 0) - (countMap.get(a.id) ?? 0));
+    const entries = Array.from(labelsSet).map((label) => createClassifiedZone(label));
+    entries.sort((a, b) => a.id.localeCompare(b.id));
     return entries;
   }, [frameLabels]);
 

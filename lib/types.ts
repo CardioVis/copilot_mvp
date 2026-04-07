@@ -85,3 +85,19 @@ export class OtherZone implements Zone {
     public name: string,
   ) {}
 }
+
+/** A polygon zone categorised as "hidden" (defaults to orange). */
+export class HiddenZone implements Zone {
+  color = "#f97316";
+  opacity = 1;
+  points: Point[] = [];
+  visible = true;
+  fillStyle: ZoneFillStyle = "dashed";
+  labelPos?: Point;
+  
+
+  constructor(
+    public id: string,
+    public name: string,
+  ) {}
+}

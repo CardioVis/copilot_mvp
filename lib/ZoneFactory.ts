@@ -1,4 +1,4 @@
-import { Zone, SafeZone, DangerZone, OtherZone } from "./types";
+import { Zone, SafeZone, DangerZone, OtherZone, HiddenZone } from "./types";
 import { DANGER_LABELS, SAFE_LABELS, OTHER_LABELS } from "./overlayConfig";
 
 export type ZoneCategory = "danger" | "safe" | "other" | "unknown";
@@ -20,6 +20,6 @@ export function createClassifiedZone(label: string): Zone {
     case "other":
       return new OtherZone(label, label);
     default:
-      return new SafeZone(label, label);
+      return new HiddenZone(label, label);
   }
 }
