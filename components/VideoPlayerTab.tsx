@@ -84,8 +84,8 @@ export default function VideoPlayerTab({ initialDir = "" }: VideoPlayerTabProps)
   const [frameRleLabels, setFrameRleLabels] = useState<FrameRleLabels[]>([]);
 
   // Derive Zone[] from all frame labels for SideBar.
-  // Counts how many frames each zone label appears in and converts that to a
-  // percentage accuracy score, then sorts zones by descending frequency.
+  // Counts how many frames each zone label appears in, then sorts zones by
+  // descending frequency (most frequent first).
   const detectedZones = useMemo((): Zone[] => {
     if (frameLabels.length === 0) return [];
     const countMap = new Map<string, number>();
@@ -94,13 +94,8 @@ export default function VideoPlayerTab({ initialDir = "" }: VideoPlayerTabProps)
         countMap.set(zone.label, (countMap.get(zone.label) ?? 0) + 1);
       }
     }
-    const total = frameLabels.length;
-    const entries = Array.from(countMap.entries()).map(([label, count]) => {
-      const zone = createClassifiedZone(label);
-      zone.accuracy = Math.round((count / total) * 100);
-      return zone;
-    });
-    entries.sort((a, b) => (b.accuracy ?? 0) - (a.accuracy ?? 0));
+    const entries = Array.from(countMap.keys()).map((label) => createClassifiedZone(label));
+    entries.sort((a, b) => (countMap.get(b.id) ?? 0) - (countMap.get(a.id) ?? 0));
     return entries;
   }, [frameLabels]);
 
@@ -143,7 +138,7 @@ export default function VideoPlayerTab({ initialDir = "" }: VideoPlayerTabProps)
 
     try {
       // Check directory
-      const check = await fetch("/api/local-files", {
+      const check = await fetch("/api/video", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ dir: dirPath }),
@@ -156,7 +151,7 @@ export default function VideoPlayerTab({ initialDir = "" }: VideoPlayerTabProps)
 
       // Load labels
       const labelsRes = await fetch(
-        `/api/local-files?dir=${encodeURIComponent(dirPath)}&file=labels_points.json`
+        `/api/labels-points?dir=${encodeURIComponent(dirPath)}`
       );
       const labelsData = await labelsRes.json();
       if (Array.isArray(labelsData)) {
@@ -167,7 +162,7 @@ export default function VideoPlayerTab({ initialDir = "" }: VideoPlayerTabProps)
       if (info.files?.includes("labels.json")) {
         try {
           const rleRes = await fetch(
-            `/api/local-files?dir=${encodeURIComponent(dirPath)}&file=labels.json`
+            `/api/labels?dir=${encodeURIComponent(dirPath)}`
           );
           if (rleRes.ok) {
             const rleData = await rleRes.json();
@@ -184,7 +179,7 @@ export default function VideoPlayerTab({ initialDir = "" }: VideoPlayerTabProps)
 
       // Set video source (streamed from API)
       setVideoSrc(
-        `/api/local-files?dir=${encodeURIComponent(dirPath)}&file=footage.mp4`
+        `/api/video?dir=${encodeURIComponent(dirPath)}`
       );
       setUseFsApi(false);
     } catch (err) {

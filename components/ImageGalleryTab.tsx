@@ -231,7 +231,7 @@ export default function ImageGalleryTab({
     } else {
       try {
         const url = folder
-          ? `/api/local-files?dir=${encodeURIComponent(folder)}&file=labels.json`
+          ? `/api/labels?dir=${encodeURIComponent(folder)}`
           : "/api/labels";
         const records = await fetch(url).then((r) => r.json());
         if (Array.isArray(records)) loadLabelsFromRecords(records);
@@ -245,7 +245,7 @@ export default function ImageGalleryTab({
     } else {
       try {
         const url = folder
-          ? `/api/local-files?dir=${encodeURIComponent(folder)}&file=labels_points.json`
+          ? `/api/labels-points?dir=${encodeURIComponent(folder)}`
           : "/api/labels-points";
         const records = await fetch(url).then((r) => r.json());
         if (Array.isArray(records)) loadBoundaryFromRecords(records);

@@ -2,33 +2,25 @@ import { NextRequest, NextResponse } from "next/server";
 import { readFile, readdir, stat } from "fs/promises";
 import path from "path";
 
-const ALLOWED_FILES = new Set(["footage.mp4", "labels_points.json", "labels.json"]);
-
 function isValidDirectory(dir: string): boolean {
-  // Must be an absolute path, no path traversal
   const normalized = path.resolve(dir);
   return normalized === dir || normalized === dir.replace(/[/\\]+$/, "");
 }
 
+/** GET /api/video?dir=<absolute-path> — stream footage.mp4 from the given directory. */
 export async function GET(req: NextRequest) {
   const dir = req.nextUrl.searchParams.get("dir");
-  const file = req.nextUrl.searchParams.get("file");
 
-  if (!dir || !file) {
-    return NextResponse.json({ error: "Missing dir or file param" }, { status: 400 });
-  }
-
-  if (!ALLOWED_FILES.has(file)) {
-    return NextResponse.json({ error: "File not allowed" }, { status: 403 });
+  if (!dir) {
+    return NextResponse.json({ error: "Missing dir param" }, { status: 400 });
   }
 
   if (!isValidDirectory(dir)) {
     return NextResponse.json({ error: "Invalid directory" }, { status: 400 });
   }
 
-  const filePath = path.join(path.resolve(dir), file);
+  const filePath = path.join(path.resolve(dir), "footage.mp4");
 
-  // Ensure resolved path stays within the specified directory
   if (!filePath.startsWith(path.resolve(dir))) {
     return NextResponse.json({ error: "Path traversal" }, { status: 403 });
   }
@@ -36,15 +28,9 @@ export async function GET(req: NextRequest) {
   try {
     await stat(filePath);
   } catch {
-    return NextResponse.json({ error: "File not found" }, { status: 404 });
+    return NextResponse.json({ error: "footage.mp4 not found" }, { status: 404 });
   }
 
-  if (file === "labels_points.json" || file === "labels.json") {
-    const content = await readFile(filePath, "utf-8");
-    return NextResponse.json(JSON.parse(content));
-  }
-
-  // Stream the video file
   const data = await readFile(filePath);
   return new NextResponse(data, {
     headers: {
@@ -55,7 +41,11 @@ export async function GET(req: NextRequest) {
   });
 }
 
-/** List available directories or check if a directory has the required files */
+/**
+ * POST /api/video — check that the given directory contains the required files.
+ * Body: { dir: string }
+ * Returns: { hasVideo, hasLabels, files }
+ */
 export async function POST(req: NextRequest) {
   const { dir } = await req.json();
 
