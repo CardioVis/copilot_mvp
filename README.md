@@ -1,6 +1,6 @@
 # CARDIOVIS
 
-A surgical video annotation and hazard awareness tool for cardiac procedures. Displays real-time segmentation overlays, animated danger zone indicators, and safety corridor visualisations on endoscopy video frames.
+A surgical video hazard-awareness tool. Plays endoscopy footage while rendering real-time boundary polygon overlays, RLE segmentation masks, and animated danger-zone indicators synced to each video frame.
 
 ---
 
@@ -40,23 +40,121 @@ pnpm lint
 
 ---
 
+## Environment Variables
+
+Set these in a `.env.local` file (or equivalent) before starting the server:
+
+| Variable | Description |
+|---|---|
+| `DEFAULT_VIDEO_DIR` | Absolute path to a directory containing `footage.mp4` and `points.json`. Pre-fills the video tab on first load. |
+| `DEFAULT_GALLERY_DIR` | Absolute path to a directory used by the image gallery tab. Pre-fills the gallery path and is used for server-side mask pre-fetching. |
+
+Both variables are optional. Without them the application starts with empty directory inputs.
+
+---
+
 ## Loading Data
 
-The application has two tabs:
+### Hazard Awareness (Video Player tab)
 
-**Hazard Awareness (Video Player)**
-- Enter a directory path containing `footage.mp4` and `labels_points.json`, then click **Load**.
-- Alternatively click **Choose Folder…** to pick a local folder via the browser File System Access API.
-- Optionally place `labels.json` in the same folder to enable RLE segmentation mask overlays.
+- The player looks for `footage.mp4` in the configured directory and streams it via `/api/video`.
+- Boundary polygons are loaded from `points.json` (served by `/api/points`).
+- Segmentation masks are loaded from `masks.json` (served by `/api/masks`).
+- Overlays are drawn on a canvas stacked above the `<video>` element and updated every animation frame.
 
-**Dataset Preview (Image Gallery)**
-- Enter a directory path or click **Choose Folder…** to browse frames.
-- Expects a `frames/` sub-folder for images, and `labels.json` / `labels_points.json` at the folder root.
-- Toggle **Show Labels**, **Show Boundary**, and **Show Lines** to layer overlays on the selected frame.
+Expected directory layout:
 
-**Editor** (hidden by default, enable in `TaskBar.tsx`)
-- Draw and edit polygon zones over the endoscopy still image.
-- Sync zones to/from Google Drive via an Apps Script URL.
+```
+<videoDir>/
+  footage.mp4
+  points.json         — polygon annotations per frame
+  masks.json          — RLE segmentation masks per frame (optional)
+```
+
+### Dataset Preview (Image Gallery tab)
+
+- Browses frame images from a local directory via `/api/images`.
+- Expects images directly in the chosen directory (PNG, JPG, JPEG, GIF, WebP, SVG, AVIF).
+- Loads `masks.json` and `points.json` from the same directory for per-frame overlays.
+- Toggle **Show Segmentation**, **Show Boundary**, and **Show Lines** to layer overlays on the selected frame.
+- Overlay renders are cached as data-URLs so each frame is only decoded once.
+
+Expected directory layout:
+
+```
+<galleryDir>/
+  frame_000001.png    — frame images (any supported extension)
+  frame_000002.png
+  ...
+  masks.json          — RLE segmentation masks (optional)
+  points.json         — boundary polygons and line annotations (optional)
+```
+
+---
+
+## Data Formats
+
+**`points.json`** — array of per-frame records:
+```json
+[
+  {
+    "image": "frame_000001.png",
+    "zones": [
+      { "label": "aorta", "points": [[{"x": 0.1, "y": 0.2}, ...]] }
+    ],
+    "lines": [
+      { "label": "incision", "points": [{"x": 0.3, "y": 0.4}, ...] }
+    ]
+  }
+]
+```
+Points are normalised to `[0, 1]`. `zones[].points` is an array of polygon rings (array of arrays); `lines[].points` is a flat array.
+
+**`masks.json`** — array of per-frame records with Label Studio brush-RLE encoded masks:
+```json
+[
+  {
+    "image": "frame_000001.png",
+    "tags": [
+      { "brushlabels": ["aorta"], "rle": [...], "width": 640, "height": 480 }
+    ]
+  }
+]
+```
+
+---
+
+## Utility Scripts
+
+### `scripts/process_features.js`
+
+Converts a directory of raw frame images and binary mask PNGs into `masks.json` and `points.json`.
+
+```
+<projectDir>/
+  frames/               — frame_NNNNNN.png
+  masks/
+    class01_<name>/     — class01_NNNNNN.png  (binary 0/255 mask)
+    class02_<name>/
+    ...
+  json/                 — ann_NNNNNN.json (optional, for class name mapping)
+```
+
+```bash
+node scripts/process_features.js [projectDir] [--epsilon=7] [--start=N] [--end=N]
+```
+
+Outputs `masks.json` and `points.json` into `<projectDir>/`.
+
+### `scripts/frames_to_video.js`
+
+Assembles a `footage.mp4` from a `frames/` sub-folder using ffmpeg.
+
+```bash
+node scripts/frames_to_video.js [projectDir] [--fps=18] [--start=N] [--end=N]
+```
+
+Requires `ffmpeg` on `PATH`. Outputs `<projectDir>/footage.mp4`.
 
 ---
 
@@ -64,40 +162,36 @@ The application has two tabs:
 
 ```
 app/
-  layout.tsx              Root Next.js layout (sets page title)
-  page.tsx                Home page — renders EndoscopyLayout
+  layout.tsx              Root Next.js layout
+  page.tsx                Home page — pre-fetches masks/points server-side, renders AICopilotLayout
   api/
-    drive/route.ts        Proxy to Google Apps Script for zone persistence
-    frame/route.ts        Serve an individual frame image by path
-    images/route.ts       List frame images from a local directory
-    labels/route.ts       Serve default labels.json from public/
-    labels-points/route.ts  Serve default labels_points.json from public/
-    local-files/route.ts  Read footage.mp4, labels.json, labels_points.json from disk
+    images/route.ts       List frame images or serve a single image from a local directory
+    masks/route.ts        Serve masks.json from a given directory (or public/ fallback)
+    points/route.ts       Serve points.json from a given directory (or public/ fallback)
+    video/route.ts        Stream footage.mp4 from a given directory with HTTP range support
 
 components/
-  EndoscopyLayout.tsx     Root layout shell — mounts ZoneEditorProvider, routes tabs
-  VideoViewport.tsx       16:9 letterbox container for the still image + overlay
-  SegmentationOverlay.tsx SVG editing layer — draws zones, safe margins, labels; drag/click handlers
-  SideBar.tsx             Left panel — surgery phase info, zone lists by category, dev tool toggle
-  ZoneEditorPanel.tsx     Dev tool — zone CRUD, style controls, Google Drive sync, clipboard I/O
-  TaskBar.tsx             Top header — tab navigation, settings dropdown, animation toggle
-  ImageGallery.tsx        Frame browser with segmentation/boundary/line overlay toggles
-  VideoPlayerTab.tsx      Video player with per-frame boundary, segmentation, and line overlays
-
-contexts/
-  ZoneEditorContext.tsx   React context + provider — owns zone state, animation state, edit mode
-
-hooks/
-  useZoneAnimation.ts     Animation loop hook for SVG danger zone flash/zoom effect
+  AICopilotLayout.tsx     Root client layout — owns tab state, renders TaskBar + active tab
+  TaskBar.tsx             Top header — tab navigation (Hazard Awareness / Dataset Preview)
+  SideBar.tsx             Left panel — surgery phase display and zone list by category
+  VideoPlayerTab.tsx      Video player with per-frame boundary, segmentation/RLE, and line overlays
+  ImageGalleryTab.tsx     Frame browser with cached per-frame overlay rendering
 
 lib/
-  types.ts                Core domain types: Point, Zone, SafeMargin, ZoneFillStyle; SafeZone / DangerZone / OtherZone classes
-  geometry.ts             Pure geometry helpers: centroid, segment distance, insert-index, edge intersection
-  colors.ts               Colour utilities: parseHex, lerpRgb, lerpHexColor
-  ZoneFactory.ts          Factory — classifyZone(), createClassifiedZone() from label string
-  overlayConfig.ts        Centralised rendering constants (line widths, opacities, label sets)
-  zoneStyles.ts           SVG style helpers for zone fill, stroke, dash, hatch patterns
-  zoneSerializer.ts       Text serialisation / deserialisation for Zone and SafeMargin
+  types.ts                Core types: Point, Zone, ZoneFillStyle; SafeZone / DangerZone / OtherZone / HiddenZone classes
+  ZoneFactory.ts          classifyZone() and createClassifiedZone() — maps label strings to zone categories
+  BoundaryAnimationManager.ts  Per-zone animation state: danger flash (blink + label zoom), label smoothing
+  boundaryOverlay.ts      Canvas renderer for boundary polygons and line annotations
+  segmentationOverlay.ts  Canvas renderer for RLE-decoded segmentation masks with label badges
+  ImageTools.ts           Colour utilities (parseHex, lerpRgb, lerpHexColor), canvas helpers, colour maps
+  overlayConfig.ts        Central rendering constants — line widths, opacities, dash patterns, label sets
+
+scripts/
+  process_features.js     Convert frame images + mask PNGs → masks.json + points.json
+  frames_to_video.js      Assemble frames/ folder → footage.mp4 via ffmpeg
+
+google-apps-script.js     Google Apps Script (doGet/doPost) for optional Drive-based zone file sync
+```
   BoundaryAnimationManager.ts  Per-zone animation state machine for video overlay (flash, zoom, smoothing)
   rleDecoder.ts           Label Studio RLE decoder; canvas renderers for segmentation, boundary, and line overlays
   services/
