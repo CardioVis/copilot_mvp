@@ -50,22 +50,26 @@ export default function SideBar({
             <DangerZonesContent zones={dangerZonesClassified} />
           </div>
         </div>
-        <div>
-          <h3 className="py-1 text-xs font-medium uppercase tracking-wider text-zinc-500">
-            Safe Zones
-          </h3>
-          <div className="mt-2">
-            <SafeZonesContent zones={safeZonesClassified} safeZones={safeZones} />
+        {otherZonesClassified.length > 0 && (
+          <div>
+            <h3 className="py-1 text-xs font-medium uppercase tracking-wider text-zinc-500">
+              Safe Zones
+            </h3>
+            <div className="mt-2">
+              <SafeZonesContent zones={safeZonesClassified} safeZones={safeZones} />
+            </div>
           </div>
-        </div>
-        <div>
-          <h3 className="py-1 text-xs font-medium uppercase tracking-wider text-zinc-500">
-            Other
-          </h3>
-          <div className="mt-2">
-            <OtherZonesContent zones={otherZonesClassified} />
+        )}
+        {otherZonesClassified.length > 0 && (
+          <div>
+            <h3 className="py-1 text-xs font-medium uppercase tracking-wider text-zinc-500">
+              Other
+            </h3>
+            <div className="mt-2">
+              <OtherZonesContent zones={otherZonesClassified} />
+            </div>
           </div>
-        </div>
+        )}
         {showDevTool && (
           <div className="border-t border-zinc-800 pt-4">
             <CollapsibleSection

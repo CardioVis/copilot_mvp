@@ -1,11 +1,7 @@
 import { SafeZone, DangerZone, OtherZone, Zone } from "./types";
+import { DANGER_LABELS, SAFE_LABELS, OTHER_LABELS, IGNORED_LABELS } from "./overlayConfig";
 
 // ── Zone classification ───────────────────────────────────────────────────────
-
-const DANGER_LABELS = new Set(["Phrenic nerve"]);
-const SAFE_LABELS = new Set(["Pericardium"]);
-const OTHER_LABELS = new Set(["Epicardial adipose tissue"]);
-
 export type ZoneCategory = "danger" | "safe" | "other" | "unknown";
 
 export function classifyZone(label: string): ZoneCategory {
@@ -58,7 +54,10 @@ export const animationConfig = {
   /** Boundary opacity after the flash animation completes (0–1). */
   steadyOpacity: 1,
   /** Smoothing factor for label position (0–1). Lower = smoother/slower. */
-  labelSmoothingFactor: 0.01,
+  // Feature 1
+  // labelSmoothingFactor: 0.01,
+  // Feature 3
+  labelSmoothingFactor: 0.1,
 };
 
 // ── Per-zone render hints produced each frame ─────────────────────────────────
@@ -102,6 +101,11 @@ export class BoundaryAnimationManager {
     // Detect whether video is advancing
     this.playing = videoTime !== this.lastVideoTime;
     this.lastVideoTime = videoTime;
+
+    // Strip ignored labels before any processing
+    for (const label of visibleLabels) {
+      if (IGNORED_LABELS.has(label)) visibleLabels.delete(label);
+    }
 
     // Remove zones that are no longer on screen
     for (const label of this.tracked.keys()) {

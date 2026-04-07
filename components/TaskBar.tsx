@@ -13,7 +13,7 @@ interface TaskBarProps {
 
 const TABS: { id: AppTab; label: string }[] = [
     { id: "video", label: "Hazard Awareness" },
-    { id: "endoscopy", label: "Editor" },
+    // { id: "endoscopy", label: "Editor" },
     { id: "gallery", label: "Dataset Preview" },
 ];
 

@@ -78,11 +78,39 @@ export const overlayLabel = {
   borderWidth: 1.5,
 };
 
+// ── labels ──────────────────────────────────────────────────────────────
+
+export const DANGER_LABELS = new Set<string>([
+  "Phrenic nerve",
+  "Aortic root",
+  "Auricles",
+  "MV anterior annulus",
+  "MV posterior annulus"
+]);
+export const SAFE_LABELS = new Set<string>([
+  "Pericardium",
+  "Grasper",
+  "Needle holders",
+  "Anterior MV (A1)",
+  "Anterior MV (A2)"
+]);
+export const OTHER_LABELS = new Set<string>([
+  "Epicardial adipose tissue",
+  "Epicardial fat on aortic"
+]);
+export const IGNORED_LABELS = new Set<string>([
+  // "Instrument 0",
+  // "Instrument 1",
+  // "Retractor",
+  // "Artificial Chordae",
+  // "MV annuloplasty suture"
+]);
+
 // ── Segmentation mask ─────────────────────────────────────────────────────────
 
 export const segmentationMask = {
   /** Fill opacity applied to all RLE mask pixels (0–1). */
-  opacity: 0.45,
+  opacity: 0.25,
 };
 
 // ── Annotation line (open polyline, e.g. Centerline) ─────────────────────────

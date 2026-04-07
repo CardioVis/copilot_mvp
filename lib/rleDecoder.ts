@@ -11,6 +11,7 @@ import {
   overlayLabel,
   segmentationMask,
   annotationLine,
+  IGNORED_LABELS,
 } from "./overlayConfig";
 import type { ZoneRenderHint } from "./BoundaryAnimationManager";
 import { classifyZone, BoundaryAnimationManager } from "./BoundaryAnimationManager";
@@ -112,6 +113,17 @@ const KNOWN_COLORS: Record<string, LabelColor> = {
   "Epicardial adipose tissue": { r: 249, g: 115, b: 22 },
   "Incision line": { r: 50, g: 220, b: 80 },
   Centerline: { r: 50, g: 220, b: 80 },
+  "Anterior MV (A1)": { r: 0, g: 150, b: 200 },   // teal-blue
+  "Anterior MV (A2)": { r: 0, g: 230, b: 200 },   // cyan-green
+  // "Artificial Chordae": { r: 0, g: 230, b: 200 },
+  // "MV annuloplasty suture": { r: 0, g: 230, b: 200 },
+  "MV anterior annulus": { r: 173, g: 255, b: 47 }, // green-yellow (lime)
+  "MV posterior annulus": { r: 45, g: 212, b: 191 },// aquamarine
+  "Native Chordae": { r: 255, g: 195, b: 0 },     // amber/gold
+  "Posterior MV (P1)": { r: 255, g: 90, b: 90 },   // coral red
+  "Posterior MV (P2)": { r: 255, g: 130, b: 70 },  // orange-red
+  "Posterior MV (P3)": { r: 255, g: 110, b: 180 }, // pink
+  "Posterior Papillary Muscle MV": { r: 125, g: 75, b: 255 }, // violet
 };
 
 function lerpColor(a: LabelColor, b: LabelColor, t: number): LabelColor {
@@ -162,6 +174,9 @@ export function renderSegmentationOverlay(
   ctx.clearRect(0, 0, width, height);
 
   const totalPixels = width * height;
+
+  // Filter out ignored labels before any processing
+  tags = tags.filter((t) => !IGNORED_LABELS.has(t.label));
 
   // Assign a stable colour index to each unique label
   const labelIndex = new Map<string, number>();
@@ -318,9 +333,8 @@ export function renderBoundaryOverlay(
   const ctx = canvas.getContext("2d")!;
   ctx.clearRect(0, 0, width, height);
 
-  const visibleZones = showSafeZones
-    ? zones
-    : zones.filter((z) => classifyZone(z.label) !== "safe");
+  const visibleZones = (showSafeZones ? zones : zones.filter((z) => classifyZone(z.label) !== "safe"))
+    .filter((z) => !IGNORED_LABELS.has(z.label));
 
   // Assign stable colour index
   const labelIndex = new Map<string, number>();

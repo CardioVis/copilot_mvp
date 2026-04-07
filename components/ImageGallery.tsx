@@ -90,7 +90,7 @@ export default function ImageGallery() {
   // Decode overlay when image or toggle changes
   const selectedName = selected?.name ?? null;
   useEffect(() => {
-    if (!showOverlay || !selectedName || !labelsMap[selectedName]) {
+    if (!showOverlay || !selectedName || !labelsMap[selectedName] || !selected) {
       setOverlayUrl(null);
       return;
     }
@@ -99,16 +99,29 @@ export default function ImageGallery() {
       return;
     }
     setOverlayDecoding(true);
-    const timer = setTimeout(() => {
+    let cancelled = false;
+    const img = new Image();
+    img.onload = () => {
+      if (cancelled) return;
       const canvas = document.createElement("canvas");
-      renderSegmentationOverlay(canvas, labelsMap[selectedName]);
+      renderSegmentationOverlay(canvas, labelsMap[selectedName]!, img.naturalWidth, img.naturalHeight);
       const url = canvas.toDataURL();
       overlayCache.current.set(selectedName, url);
       setOverlayUrl(url);
       setOverlayDecoding(false);
-    }, 0);
-    return () => clearTimeout(timer);
-  }, [showOverlay, selectedName, labelsMap]);
+    };
+    img.onerror = () => {
+      if (cancelled) return;
+      const canvas = document.createElement("canvas");
+      renderSegmentationOverlay(canvas, labelsMap[selectedName]!);
+      const url = canvas.toDataURL();
+      overlayCache.current.set(selectedName, url);
+      setOverlayUrl(url);
+      setOverlayDecoding(false);
+    };
+    img.src = selected.src;
+    return () => { cancelled = true; };
+  }, [showOverlay, selectedName, labelsMap, selected]);
 
   // Render boundary overlay when image or toggle changes
   useEffect(() => {

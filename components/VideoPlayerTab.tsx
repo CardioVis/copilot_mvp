@@ -34,7 +34,7 @@ export default function VideoPlayerTab() {
   const containerRef = useRef<HTMLDivElement>(null);
   const animFrameRef = useRef<number>(0);
 
-  const [dirPath, setDirPath] = useState("D:\\Projects\\Features\\Feature_1");
+  const [dirPath, setDirPath] = useState("D:\\Projects\\Features\\Feature_3");
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
   const [frameLabels, setFrameLabels] = useState<FrameLabels[]>([]);
   const [playing, setPlaying] = useState(false);
