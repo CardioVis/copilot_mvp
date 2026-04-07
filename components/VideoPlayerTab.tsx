@@ -13,7 +13,7 @@ import {
   SegmentationTag,
 } from "@/lib/rleDecoder";
 import SideBar from "@/components/SideBar";
-import { Zone, SafeMargin } from "@/lib/types";
+import { Zone } from "@/lib/types";
 import { BoundaryAnimationManager } from "@/lib/BoundaryAnimationManager";
 import { createClassifiedZone } from "@/lib/ZoneFactory";
 
@@ -566,14 +566,6 @@ export default function VideoPlayerTab() {
         <SideBar
           isOpen
           zones={detectedZones.filter((z) => currentZoneNames.has(z.id))}
-          safeZones={[] as SafeMargin[]}
-          activeZoneId={null}
-          editMode={false}
-          onSetZones={() => {}}
-          onSetSafeZones={() => {}}
-          onSetActiveZoneId={() => {}}
-          onSetEditMode={() => {}}
-          showDevTool={false}
         />
 
         {/* Video + controls column */}

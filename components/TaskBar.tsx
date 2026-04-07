@@ -2,22 +2,19 @@
 
 import { useRef, useState, useEffect } from "react";
 
-export type AppTab = "endoscopy" | "gallery" | "video";
+export type AppTab = "gallery" | "video";
 
 interface TaskBarProps {
-    isAnimating: boolean;
-    onToggleAnimation: () => void;
     activeTab: AppTab;
     onTabChange: (tab: AppTab) => void;
 }
 
 const TABS: { id: AppTab; label: string }[] = [
     { id: "video", label: "Hazard Awareness" },
-    { id: "endoscopy", label: "Editor" },
     { id: "gallery", label: "Dataset Preview" },
 ];
 
-export default function TaskBar({ isAnimating, onToggleAnimation, activeTab, onTabChange }: TaskBarProps) {
+export default function TaskBar({ activeTab, onTabChange }: TaskBarProps) {
     const [menuOpen, setMenuOpen] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
 
@@ -73,17 +70,6 @@ export default function TaskBar({ isAnimating, onToggleAnimation, activeTab, onT
 
                 {menuOpen && (
                     <div className="absolute right-0 top-10 z-50 min-w-40 rounded-md border border-zinc-700 bg-zinc-900 py-1 shadow-lg">
-                        <button
-                            onClick={() => { onToggleAnimation(); setMenuOpen(false); }}
-                            className={`flex w-full items-center gap-2 px-4 py-2 text-sm transition-colors ${
-                                isAnimating
-                                    ? "text-amber-400 hover:bg-zinc-800"
-                                    : "text-zinc-300 hover:bg-zinc-800"
-                            }`}
-                        >
-                            {isAnimating ? "⏸" : "▶"}
-                            {isAnimating ? "Pause" : "Play"}
-                        </button>
                         <button
                             onClick={() => setMenuOpen(false)}
                             className="flex w-full items-center gap-2 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-800 transition-colors"
