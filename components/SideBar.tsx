@@ -44,6 +44,38 @@ export default function SideBar({
         {/* <AIPanel /> */}
         <div>
           <h3 className="py-1 text-xs font-medium uppercase tracking-wider text-zinc-500">
+            Surgery Phase
+          </h3>
+          <div className="mt-2 space-y-3">
+            <div>
+              <p className="text-xs text-zinc-400">Next phase</p>
+              <div className="mt-1 flex items-center justify-between">
+                <p className="text-sm text-zinc-300">Leaflet Coaptation</p>
+                <p className="mt-0.5 text-[11px] text-zinc-500">Expected in 18m</p>
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs text-zinc-400">Current phase</p>
+              <div className="mt-1 flex items-center justify-between">
+                <p className="text-sm text-emerald-400">Annuloplasty</p>
+                <p className="mt-0.5 text-[11px] text-zinc-500">10:15:12</p>
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs text-zinc-400">Previous phases</p>
+              <div className="mt-1 flex items-center justify-between">
+                <p className="text-sm text-white">Leaflet Repair</p>
+                <p className="mt-0.5 text-[11px] text-zinc-500">Ended 10:12:25</p>
+              </div>
+            </div>
+
+            
+          </div>
+        </div>
+        <div>
+          <h3 className="py-1 text-xs font-medium uppercase tracking-wider text-zinc-500">
             Danger Zones
           </h3>
           <div className="mt-2">
