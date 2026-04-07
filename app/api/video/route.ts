@@ -56,8 +56,8 @@ export async function POST(req: NextRequest) {
   try {
     const entries = await readdir(path.resolve(dir));
     const hasVideo = entries.includes("footage.mp4");
-    const hasLabels = entries.includes("labels_points.json");
-    return NextResponse.json({ hasVideo, hasLabels, files: entries });
+    // const hasMasks = entries.includes("masks_points.json");
+    return NextResponse.json({ hasVideo, files: entries });
   } catch {
     return NextResponse.json({ error: "Cannot read directory" }, { status: 404 });
   }

@@ -8,30 +8,30 @@ export default async function Home() {
   const defaultVideoDir = process.env.DEFAULT_VIDEO_DIR ?? "";
   const defaultGalleryDir = process.env.DEFAULT_GALLERY_DIR ?? "";
 
-  // Pre-fetch label data server-side to avoid client waterfall fetches on initial render.
+  // Pre-fetch mask data server-side to avoid client waterfall fetches on initial render.
   // When a default gallery dir is configured, read from that directory; otherwise fall back to public/.
-  const labelsJsonPath = defaultGalleryDir
-    ? path.join(defaultGalleryDir, "labels.json")
-    : path.join(process.cwd(), "public", "labels.json");
-  const labelPointsPath = defaultGalleryDir
-    ? path.join(defaultGalleryDir, "labels_points.json")
-    : path.join(process.cwd(), "public", "labels_points.json");
+  const masksJsonPath = defaultGalleryDir
+    ? path.join(defaultGalleryDir, "masks.json")
+    : path.join(process.cwd(), "public", "masks.json");
+  const maskPointsPath = defaultGalleryDir
+    ? path.join(defaultGalleryDir, "masks_points.json")
+    : path.join(process.cwd(), "public", "masks_points.json");
 
-  let initialLabels: Array<{ image: string; tags: SegmentationTag[] }> = [];
-  let initialLabelPoints: BoundaryRecord[] = [];
+  let initialMasks: Array<{ image: string; tags: SegmentationTag[] }> = [];
+  let initialPoints: BoundaryRecord[] = [];
 
   try {
-    initialLabels = JSON.parse(await readFile(labelsJsonPath, "utf8"));
+    initialMasks = JSON.parse(await readFile(masksJsonPath, "utf8"));
   } catch {}
 
   try {
-    initialLabelPoints = JSON.parse(await readFile(labelPointsPath, "utf8"));
+    initialPoints = JSON.parse(await readFile(maskPointsPath, "utf8"));
   } catch {}
 
   return (
     <AICopilotLayout
-      initialLabels={initialLabels}
-      initialLabelPoints={initialLabelPoints}
+      initialMasks={initialMasks}
+      initialPoints={initialPoints}
       defaultVideoDir={defaultVideoDir}
       defaultGalleryDir={defaultGalleryDir}
     />

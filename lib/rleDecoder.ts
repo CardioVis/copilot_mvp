@@ -8,7 +8,7 @@
 import { overlayLabel } from "./overlayConfig";
 import { type RgbColor } from "./colors";
 
-export type LabelColor = RgbColor;
+export type MaskColor = RgbColor;
 
 export const MASK_WIDTH = 1920;
 export const MASK_HEIGHT = 1080;
@@ -87,7 +87,7 @@ export function decodeRLE(rle: number[]): Uint8Array {
 
 // ── Label colours ─────────────────────────────────────────────────────────────
 
-const KNOWN_COLORS: Record<string, LabelColor> = {
+const KNOWN_COLORS: Record<string, MaskColor> = {
   "Phrenic nerve": { r: 50, g: 150, b: 255 },
   Grasper: { r: 50, g: 220, b: 100 },
   Pericardium: { r: 255, g: 80, b: 80 },
@@ -107,7 +107,7 @@ const KNOWN_COLORS: Record<string, LabelColor> = {
   "Posterior Papillary Muscle MV": { r: 125, g: 75, b: 255 }, // violet
 };
 
-const EXTRA_COLORS: LabelColor[] = [
+const EXTRA_COLORS: MaskColor[] = [
   { r: 180, g: 100, b: 255 },
   { r: 255, g: 160, b: 50 },
   { r: 100, g: 255, b: 255 },
@@ -119,7 +119,7 @@ const EXTRA_COLORS: LabelColor[] = [
  * Looks up the label name in the curated `KNOWN_COLORS` table first;
  * falls back to a cycling palette for unknown labels.
  */
-export function getLabelColor(label: string, index: number): LabelColor {
+export function getMaskColor(label: string, index: number): MaskColor {
   return KNOWN_COLORS[label] ?? EXTRA_COLORS[index % EXTRA_COLORS.length];
 }
 

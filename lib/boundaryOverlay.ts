@@ -10,14 +10,14 @@ import { classifyZone } from "./ZoneFactory";
 import { SafeZone, DangerZone, OtherZone } from "./types";
 import { parseHex, lerpRgb } from "./colors";
 import {
-  getLabelColor,
+  getMaskColor,
   setupCanvas,
   getOverlayFontSize,
   getLineWidth,
   drawLabelBadge,
   MASK_WIDTH,
   MASK_HEIGHT,
-  type LabelColor,
+  type MaskColor,
 } from "./rleDecoder";
 
 // Derive boundary colors directly from the class defaults so any change there
@@ -25,7 +25,7 @@ import {
 const _safe = new SafeZone("", "");
 const _danger = new DangerZone("", "");
 const _other = new OtherZone("", "");
-const CLASSIFIED_COLORS: Record<string, LabelColor> = {
+const CLASSIFIED_COLORS: Record<string, MaskColor> = {
   danger:  parseHex(_danger.color),
   safe:    parseHex(_safe.color),
   other:   parseHex(_other.color),
@@ -58,7 +58,7 @@ function normalizePolygons(
 }
 
 /** Returns the boundary stroke/fill colour for a zone based on its danger classification. */
-function getBoundaryColor(label: string): LabelColor {
+function getBoundaryColor(label: string): MaskColor {
   return CLASSIFIED_COLORS[classifyZone(label)];
 }
 
@@ -210,7 +210,7 @@ export function renderLinesOverlay(
 
   for (const line of lines) {
     if (line.points.length < 2) continue;
-    const color = getLabelColor(line.label, labelIndex.get(line.label)!);
+    const color = getMaskColor(line.label, labelIndex.get(line.label)!);
 
     const area = annotationLine.area;
     if (area.bands > 0 && area.width > 0) {

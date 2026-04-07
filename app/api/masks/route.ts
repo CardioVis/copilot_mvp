@@ -7,7 +7,7 @@ function isValidDirectory(dir: string): boolean {
   return normalized === dir || normalized === dir.replace(/[\/\\]+$/, "");
 }
 
-/** GET /api/labels-points?dir=<absolute-path> — serve labels_points.json from dir, or public/ if omitted. */
+/** GET /api/masks?dir=<absolute-path> — serve masks.json from dir, or public/ if omitted. */
 export async function GET(req: NextRequest) {
   const dir = req.nextUrl.searchParams.get("dir");
 
@@ -16,17 +16,17 @@ export async function GET(req: NextRequest) {
     if (!isValidDirectory(dir)) {
       return NextResponse.json({ error: "Invalid directory" }, { status: 400 });
     }
-    filePath = path.join(path.resolve(dir), "labels_points.json");
+    filePath = path.join(path.resolve(dir), "masks.json");
     if (!filePath.startsWith(path.resolve(dir))) {
       return NextResponse.json({ error: "Path traversal" }, { status: 403 });
     }
     try {
       await stat(filePath);
     } catch {
-      return NextResponse.json({ error: "labels_points.json not found" }, { status: 404 });
+      return NextResponse.json({ error: "masks.json not found" }, { status: 404 });
     }
   } else {
-    filePath = path.join(process.cwd(), "public", "labels_points.json");
+    filePath = path.join(process.cwd(), "public", "masks.json");
   }
 
   try {

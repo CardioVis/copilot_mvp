@@ -1,13 +1,13 @@
 import { IGNORED_LABELS, segmentationMask } from "./overlayConfig";
 import {
   decodeRLE,
-  getLabelColor,
+  getMaskColor,
   setupCanvas,
   getOverlayFontSize,
   drawLabelBadge,
   MASK_WIDTH,
   MASK_HEIGHT,
-  type LabelColor,
+  type MaskColor,
 } from "./rleDecoder";
 
 export interface SegmentationTag {
@@ -15,9 +15,9 @@ export interface SegmentationTag {
   rle: number[];
 }
 
-export interface LabelInfo {
+export interface MaskInfo {
   label: string;
-  color: LabelColor;
+  color: MaskColor;
   cx: number;
   cy: number;
 }
@@ -28,7 +28,7 @@ export function renderSegmentationOverlay(
   width = MASK_WIDTH,
   height = MASK_HEIGHT,
   opacity = segmentationMask.opacity,
-): LabelInfo[] {
+): MaskInfo[] {
   const ctx = setupCanvas(canvas, width, height);
 
   const totalPixels = width * height;
@@ -75,7 +75,7 @@ export function renderSegmentationOverlay(
 
   for (const [label] of labelIndex) {
     const { mask } = perLabel.get(label)!;
-    const color = getLabelColor(label, labelIndex.get(label)!);
+    const color = getMaskColor(label, labelIndex.get(label)!);
     for (let i = 0; i < totalPixels; i++) {
       if (mask[i]) {
         const off = i * 4;
@@ -88,13 +88,13 @@ export function renderSegmentationOverlay(
   }
   ctx.putImageData(imageData, 0, 0);
 
-  const labels: LabelInfo[] = [];
+  const masks: MaskInfo[] = [];
   for (const [label] of labelIndex) {
     const entry = perLabel.get(label)!;
     if (entry.count === 0) continue;
-    labels.push({
+    masks.push({
       label,
-      color: getLabelColor(label, labelIndex.get(label)!),
+      color: getMaskColor(label, labelIndex.get(label)!),
       cx: entry.sumX / entry.count,
       cy: entry.sumY / entry.count,
     });
@@ -103,12 +103,12 @@ export function renderSegmentationOverlay(
   const fontSize = getOverlayFontSize(width);
   ctx.font = `bold ${fontSize}px system-ui, sans-serif`;
 
-  for (const li of labels) {
+  for (const li of masks) {
     ctx.save();
     ctx.translate(li.cx - width * 0.015, li.cy + height * 0.015);
     drawLabelBadge(ctx, li.label, fontSize);
     ctx.restore();
   }
 
-  return labels;
+  return masks;
 }

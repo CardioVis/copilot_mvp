@@ -40,14 +40,14 @@ function renderOverlayToUrl<T>(
 }
 
 interface ImageGalleryProps {
-  initialLabels?: Array<{ image: string; tags: SegmentationTag[] }>;
-  initialLabelPoints?: BoundaryRecord[];
+  initialMasks?: Array<{ image: string; tags: SegmentationTag[] }>;
+  initialPoints?: BoundaryRecord[];
   initialDir?: string;
 }
 
 export default function ImageGalleryTab({
-  initialLabels = [],
-  initialLabelPoints = [],
+  initialMasks = [],
+  initialPoints = [],
   initialDir = "",
 }: ImageGalleryProps) {
   const [images, setImages] = useState<ImageEntry[]>([]);
@@ -58,7 +58,7 @@ export default function ImageGalleryTab({
   const objectUrlsRef = useRef<string[]>([]);
 
   // Segmentation overlay state
-  const [labelsMap, setLabelsMap] = useState<Record<string, SegmentationTag[]>>({});
+  const [masksMap, setMasksMap] = useState<Record<string, SegmentationTag[]>>({});
   const [showOverlay, setShowOverlay] = useState(false);
   const [overlayUrl, setOverlayUrl] = useState<string | null>(null);
   const [overlayDecoding, setOverlayDecoding] = useState(false);
@@ -105,10 +105,10 @@ export default function ImageGalleryTab({
    * stores it in state.  Also resets the segmentation overlay so stale
    * renders from a previous dataset are not shown.
    */
-  function loadLabelsFromRecords(records: { image: string; tags: SegmentationTag[] }[]) {
+  function loadMasksFromRecords(records: { image: string; tags: SegmentationTag[] }[]) {
     const map: Record<string, SegmentationTag[]> = {};
     for (const rec of records) map[rec.image] = rec.tags;
-    setLabelsMap(map);
+    setMasksMap(map);
     setShowOverlay(false);
     setOverlayUrl(null);
     overlayCache.current.clear();
@@ -143,7 +143,7 @@ export default function ImageGalleryTab({
   // Decode overlay when image or toggle changes
   const selectedName = selected?.name ?? null;
   useEffect(() => {
-    if (!showOverlay || !selectedName || !labelsMap[selectedName] || !selected) {
+    if (!showOverlay || !selectedName || !masksMap[selectedName] || !selected) {
       setOverlayUrl(null);
       return;
     }
@@ -157,7 +157,7 @@ export default function ImageGalleryTab({
     img.onload = () => {
       if (cancelled) return;
       const canvas = document.createElement("canvas");
-      renderSegmentationOverlay(canvas, labelsMap[selectedName]!, img.naturalWidth, img.naturalHeight);
+      renderSegmentationOverlay(canvas, masksMap[selectedName]!, img.naturalWidth, img.naturalHeight);
       const url = canvas.toDataURL();
       overlayCache.current.set(selectedName, url);
       setOverlayUrl(url);
@@ -166,7 +166,7 @@ export default function ImageGalleryTab({
     img.onerror = () => {
       if (cancelled) return;
       const canvas = document.createElement("canvas");
-      renderSegmentationOverlay(canvas, labelsMap[selectedName]!);
+      renderSegmentationOverlay(canvas, masksMap[selectedName]!);
       const url = canvas.toDataURL();
       overlayCache.current.set(selectedName, url);
       setOverlayUrl(url);
@@ -174,7 +174,7 @@ export default function ImageGalleryTab({
     };
     img.src = selected.src;
     return () => { cancelled = true; };
-  }, [showOverlay, selectedName, labelsMap, selected]);
+  }, [showOverlay, selectedName, masksMap, selected]);
 
   // Render boundary overlay when image or toggle changes
   useEffect(() => {
@@ -227,27 +227,27 @@ export default function ImageGalleryTab({
       setLoading(false);
     }
     // Use server-pre-fetched labels when no custom folder is set; otherwise fetch from the folder.
-    if (!folder && initialLabels.length > 0) {
-      loadLabelsFromRecords(initialLabels);
+    if (!folder && initialMasks.length > 0) {
+      loadMasksFromRecords(initialMasks);
     } else {
       try {
         const url = folder
-          ? `/api/labels?dir=${encodeURIComponent(folder)}`
-          : "/api/labels";
+          ? `/api/masks?dir=${encodeURIComponent(folder)}`
+          : "/api/masks";
         const records = await fetch(url).then((r) => r.json());
-        if (Array.isArray(records)) loadLabelsFromRecords(records);
+        if (Array.isArray(records)) loadMasksFromRecords(records);
       } catch {
-        setLabelsMap({});
+        setMasksMap({});
       }
     }
-    // Use server-pre-fetched label-points when no custom folder is set; otherwise fetch from the folder.
-    if (!folder && initialLabelPoints.length > 0) {
-      loadBoundaryFromRecords(initialLabelPoints);
-    } else {
+    // Use server-pre-fetched mask-points when no custom folder is set; otherwise fetch from the folder.
+    if (!folder && initialPoints.length > 0) {
+      loadBoundaryFromRecords(initialPoints);
+      } else {
       try {
         const url = folder
-          ? `/api/labels-points?dir=${encodeURIComponent(folder)}`
-          : "/api/labels-points";
+          ? `/api/points?dir=${encodeURIComponent(folder)}`
+          : "/api/points";
         const records = await fetch(url).then((r) => r.json());
         if (Array.isArray(records)) loadBoundaryFromRecords(records);
       } catch {
@@ -274,7 +274,7 @@ export default function ImageGalleryTab({
       revokeAll();
 
       const newImages: ImageEntry[] = [];
-      let labelsHandle: FileSystemFileHandle | null = null;
+      let masksHandle: FileSystemFileHandle | null = null;
       let boundaryHandle: FileSystemFileHandle | null = null;
       let framesHandle: FileSystemDirectoryHandle | null = null;
 
@@ -285,11 +285,11 @@ export default function ImageGalleryTab({
           continue;
         }
         if (handle.kind !== "file") continue;
-        if (name === "labels.json") {
-          labelsHandle = handle;
+        if (name === "masks.json") {
+          masksHandle = handle;
           continue;
         }
-        if (name === "labels_points.json") {
+        if (name === "points.json") {
           boundaryHandle = handle;
           continue;
         }
@@ -313,18 +313,18 @@ export default function ImageGalleryTab({
       setFolderName(dirHandle.name + "/");
       setUseFsApi(true);
 
-      // Load labels.json from the chosen folder
-      if (labelsHandle) {
+      // Load masks.json from the chosen folder
+      if (masksHandle) {
         try {
-          const labelsFile = await labelsHandle.getFile();
-          const text = await labelsFile.text();
+          const masksFile = await masksHandle.getFile();
+          const text = await masksFile.text();
           const records = JSON.parse(text);
-          if (Array.isArray(records)) loadLabelsFromRecords(records);
+          if (Array.isArray(records)) loadMasksFromRecords(records);
         } catch {
-          setLabelsMap({});
+          setMasksMap({});
         }
       } else {
-        setLabelsMap({});
+        setMasksMap({});
       }
 
       // Load labels_points.json from the chosen folder
@@ -384,7 +384,7 @@ export default function ImageGalleryTab({
         </button>
         {selected && (
           <>
-            {labelsMap[selected.name] && (
+            {masksMap[selected.name] && (
               <button
                 onClick={() => setShowOverlay((v) => !v)}
                 className={`rounded border px-3 py-1 text-xs font-medium transition-colors whitespace-nowrap ${
@@ -393,7 +393,7 @@ export default function ImageGalleryTab({
                     : "border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100"
                 }`}
               >
-                {showOverlay ? "Hide Labels" : "Show Labels"}
+                {showOverlay ? "Hide Masks" : "Show Masks"}
               </button>
             )}
             {boundaryMap[selected.name] && (

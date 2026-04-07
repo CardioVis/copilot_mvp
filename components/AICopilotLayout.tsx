@@ -8,15 +8,15 @@ import type { BoundaryRecord } from "@/lib/boundaryOverlay";
 import type { SegmentationTag } from "@/lib/segmentationOverlay";
 
 interface AICopilotLayoutProps {
-  initialLabels: Array<{ image: string; tags: SegmentationTag[] }>;
-  initialLabelPoints: BoundaryRecord[];
+  initialMasks: Array<{ image: string; tags: SegmentationTag[] }>;
+  initialPoints: BoundaryRecord[];
   defaultVideoDir: string;
   defaultGalleryDir: string;
 }
 
 export default function AICopilotLayout({
-  initialLabels,
-  initialLabelPoints,
+  initialMasks,
+  initialPoints,
   defaultVideoDir,
   defaultGalleryDir,
 }: AICopilotLayoutProps) {
@@ -31,8 +31,8 @@ export default function AICopilotLayout({
       <div className="flex flex-1 overflow-hidden">
         {activeTab === "gallery" ? (
           <ImageGalleryTab
-            initialLabels={initialLabels}
-            initialLabelPoints={initialLabelPoints}
+            initialMasks={initialMasks}
+            initialPoints={initialPoints}
             initialDir={defaultGalleryDir}
           />
         ) : (

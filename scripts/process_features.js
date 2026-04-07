@@ -4,8 +4,8 @@
  *
  * Processes a project directory containing frame images and binary mask PNGs.
  * Outputs:
- *   1. labels.json        – Label Studio brush-RLE encoded masks
- *   2. labels_points.json – Douglas-Peucker simplified contour polygons
+ *   1. masks.json        – Label Studio brush-RLE encoded masks
+ *   2. points.json – Douglas-Peucker simplified contour polygons
  *
  * Expected directory structure:
  *   <projectDir>/
@@ -497,8 +497,8 @@ function processProject(projectDir) {
   }
 
   // Write outputs
-  const rlePath = path.join(projectDir, "labels.json");
-  const pointsPath = path.join(projectDir, "labels_points.json");
+  const rlePath = path.join(projectDir, "masks.json");
+  const pointsPath = path.join(projectDir, "points.json");
 
   fs.writeFileSync(rlePath, JSON.stringify(rleOutput, null, 2), "utf8");
   fs.writeFileSync(pointsPath, JSON.stringify(pointsOutput, null, 2), "utf8");
