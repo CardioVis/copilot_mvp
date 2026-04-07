@@ -38,6 +38,11 @@ export const MASK_HEIGHT = 1080;
 
 // ── Bit Stream Reader ─────────────────────────────────────────────────────────
 
+/**
+ * Reads an arbitrary number of bits sequentially from a byte array.
+ * The stream is treated as a big-endian bit sequence: the most-significant
+ * bit of byte 0 is bit 0.
+ */
 class BitInputStream {
   private bytes: number[];
   private bitPos = 0;
@@ -46,6 +51,7 @@ class BitInputStream {
     this.bytes = bytes;
   }
 
+  /** Reads `numBits` bits from the stream and returns them as an unsigned integer. */
   read(numBits: number): number {
     let value = 0;
     for (let i = 0; i < numBits; i++) {
@@ -64,6 +70,12 @@ class BitInputStream {
 
 // ── RLE Decoder ───────────────────────────────────────────────────────────────
 
+/**
+ * Decodes a Label Studio brush-RLE payload and returns the raw RGBA byte
+ * array.  The returned buffer has length `totalValues` where every group of
+ * four bytes represents one pixel (R, G, B, A).  A non-zero alpha channel
+ * indicates a foreground (masked) pixel.
+ */
 export function decodeRLE(rle: number[]): Uint8Array {
   const input = new BitInputStream(rle);
   const num = input.read(32);
@@ -127,6 +139,11 @@ const EXTRA_COLORS: LabelColor[] = [
   { r: 255, g: 100, b: 200 },
 ];
 
+/**
+ * Returns the display colour for a given label.
+ * Looks up the label name in the curated `KNOWN_COLORS` table first;
+ * falls back to a cycling palette for unknown labels.
+ */
 export function getLabelColor(label: string, index: number): LabelColor {
   return KNOWN_COLORS[label] ?? EXTRA_COLORS[index % EXTRA_COLORS.length];
 }
@@ -145,6 +162,90 @@ export interface LabelInfo {
   cy: number;
 }
 
+// ── Shared canvas / overlay helpers ──────────────────────────────────────────
+
+/**
+ * Resets a canvas to the given dimensions, clears it, and returns its 2-D
+ * rendering context.  Centralises the boilerplate that every render function
+ * would otherwise repeat.
+ */
+function setupCanvas(
+  canvas: HTMLCanvasElement,
+  width: number,
+  height: number,
+): CanvasRenderingContext2D {
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d")!;
+  ctx.clearRect(0, 0, width, height);
+  return ctx;
+}
+
+/**
+ * Returns the overlay label font size.  Honours the explicit `overlayLabel.fontSize`
+ * config value when set; otherwise scales automatically from the canvas width.
+ */
+function getOverlayFontSize(width: number): number {
+  return overlayLabel.fontSize > 0
+    ? overlayLabel.fontSize
+    : Math.max(overlayLabel.minFontSize, Math.round(width / overlayLabel.autoScaleDivisor));
+}
+
+/**
+ * Derives a canvas stroke width from a config object that supports either an
+ * explicit pixel value (`config.lineWidth > 0`) or automatic scaling relative
+ * to the canvas width.
+ */
+function getLineWidth(
+  config: { lineWidth: number; minWidth: number; autoScaleDivisor: number },
+  canvasWidth: number,
+): number {
+  return config.lineWidth > 0
+    ? config.lineWidth
+    : Math.max(config.minWidth, Math.round(canvasWidth / config.autoScaleDivisor));
+}
+
+/**
+ * Draws a rounded-rect label badge with white text centred at the canvas
+ * origin.  Must be called inside a `ctx.save()` / `ctx.translate(x, y)` /
+ * `ctx.restore()` block so the caller controls position.  The caller must
+ * also set `ctx.font` before calling so that `measureText` returns the
+ * correct width.
+ *
+ * @param alpha - Opacity multiplier applied to both the background and the
+ *   text (0–1).  Defaults to 1 (fully opaque).
+ */
+function drawLabelBadge(
+  ctx: CanvasRenderingContext2D,
+  label: string,
+  fontSize: number,
+  alpha = 1,
+): void {
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+
+  const m = ctx.measureText(label);
+  const bw = m.width + overlayLabel.paddingX * 2;
+  const bh = fontSize + overlayLabel.paddingY * 2;
+
+  // Semi-transparent dark background
+  ctx.fillStyle = `rgba(0,0,0,${overlayLabel.backgroundOpacity * alpha})`;
+  ctx.beginPath();
+  ctx.roundRect(-bw / 2, -bh / 2, bw, bh, overlayLabel.borderRadius);
+  ctx.fill();
+
+  // Transparent stroke — kept to maintain consistent canvas state
+  ctx.strokeStyle = `rgba(0,0,0,0)`;
+  ctx.lineWidth = overlayLabel.borderWidth;
+  ctx.beginPath();
+  ctx.roundRect(-bw / 2, -bh / 2, bw, bh, overlayLabel.borderRadius);
+  ctx.stroke();
+
+  // White label text
+  ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+  ctx.fillText(label, 0, 0);
+}
+
 // ── Render all masks for one image onto a canvas ──────────────────────────────
 
 export function renderSegmentationOverlay(
@@ -154,10 +255,8 @@ export function renderSegmentationOverlay(
   height = MASK_HEIGHT,
   opacity = segmentationMask.opacity,
 ): LabelInfo[] {
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext("2d")!;
-  ctx.clearRect(0, 0, width, height);
+  // Initialise canvas and obtain a clean 2-D context
+  const ctx = setupCanvas(canvas, width, height);
 
   const totalPixels = width * height;
 
@@ -233,37 +332,15 @@ export function renderSegmentationOverlay(
     });
   }
 
-  // Draw label badges
-  const fontSize =
-    overlayLabel.fontSize > 0
-      ? overlayLabel.fontSize
-      : Math.max(overlayLabel.minFontSize, Math.round(width / overlayLabel.autoScaleDivisor));
+  // Draw label badges — one per unique label at its mask centroid
+  const fontSize = getOverlayFontSize(width);
   ctx.font = `bold ${fontSize}px system-ui, sans-serif`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
 
   for (const li of labels) {
-    const m = ctx.measureText(li.label);
-    const bw = m.width + overlayLabel.paddingX * 2;
-    const bh = fontSize + overlayLabel.paddingY * 2;
-    const x = li.cx - width * 0.015;
-    const y = li.cy + height * 0.015;
-
-    ctx.fillStyle = `rgba(0,0,0,${overlayLabel.backgroundOpacity})`;
-    ctx.beginPath();
-    ctx.roundRect(x - bw / 2, y - bh / 2, bw, bh, overlayLabel.borderRadius);
-    ctx.fill();
-
-    // No visible border: make stroke transparent
-    ctx.strokeStyle = `rgba(0,0,0,0)`;
-    ctx.lineWidth = overlayLabel.borderWidth;
-    ctx.beginPath();
-    ctx.roundRect(x - bw / 2, y - bh / 2, bw, bh, overlayLabel.borderRadius);
-    ctx.stroke();
-
-    // White label text for better contrast
-    ctx.fillStyle = `rgb(255,255,255)`;
-    ctx.fillText(li.label, x, y);
+    ctx.save();
+    ctx.translate(li.cx - width * 0.015, li.cy + height * 0.015);
+    drawLabelBadge(ctx, li.label, fontSize);
+    ctx.restore();
   }
 
   return labels;
@@ -297,7 +374,7 @@ function normalizePolygons(
   return points as { x: number; y: number }[][];
 }
 
-/** Returns the boundary stroke/fill color for a zone label based on its category. */
+/** Returns the boundary stroke/fill colour for a zone based on its danger classification. */
 function getBoundaryColor(label: string): LabelColor {
   return CLASSIFIED_COLORS[classifyZone(label)];
 }
@@ -314,10 +391,8 @@ export function renderBoundaryOverlay(
   animManager?: BoundaryAnimationManager,
   showSafeZones = false,
 ): void {
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext("2d")!;
-  ctx.clearRect(0, 0, width, height);
+  // Initialise canvas and obtain a clean 2-D context
+  const ctx = setupCanvas(canvas, width, height);
 
   const visibleZones = (showSafeZones ? zones : zones.filter((z) => classifyZone(z.label) !== "safe"))
     .filter((z) => !IGNORED_LABELS.has(z.label));
@@ -329,10 +404,7 @@ export function renderBoundaryOverlay(
     if (!labelIndex.has(z.label)) labelIndex.set(z.label, idx++);
   }
 
-  const lineWidth =
-    boundaryLine.lineWidth > 0
-      ? boundaryLine.lineWidth
-      : Math.max(boundaryLine.minWidth, Math.round(width / boundaryLine.autoScaleDivisor));
+  const lineWidth = getLineWidth(boundaryLine, width);
 
   const lineDash =
     boundaryLine.style === "dashed"
@@ -366,13 +438,8 @@ export function renderBoundaryOverlay(
   }
 
   // Labels at combined centroid of all polygons per zone
-  const fontSize =
-    overlayLabel.fontSize > 0
-      ? overlayLabel.fontSize
-      : Math.max(overlayLabel.minFontSize, Math.round(width / overlayLabel.autoScaleDivisor));
+  const fontSize = getOverlayFontSize(width);
   ctx.font = `${fontSize}px system-ui, sans-serif`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
 
   for (const zone of visibleZones) {
     const polygons = normalizePolygons(zone.points);
@@ -400,25 +467,9 @@ export function renderBoundaryOverlay(
     ctx.translate(smoothed.x - width * 0.015, smoothed.y + height * 0.04);
     ctx.scale(scale, scale);
 
-    const m = ctx.measureText(zone.label);
-    const bw = m.width + overlayLabel.paddingX * 2;
+    // bh is reused below to scale the flashing warning icon
     const bh = fontSize + overlayLabel.paddingY * 2;
-
-    ctx.fillStyle = `rgba(0,0,0,${overlayLabel.backgroundOpacity * labelAlpha})`;
-    ctx.beginPath();
-    ctx.roundRect(-bw / 2, -bh / 2, bw, bh, overlayLabel.borderRadius);
-    ctx.fill();
-
-    // No visible border: make stroke transparent
-    ctx.strokeStyle = `rgba(0,0,0,0)`;
-    ctx.lineWidth = overlayLabel.borderWidth;
-    ctx.beginPath();
-    ctx.roundRect(-bw / 2, -bh / 2, bw, bh, overlayLabel.borderRadius);
-    ctx.stroke();
-
-    // White label text (respect label alpha)
-    ctx.fillStyle = `rgba(255,255,255,${labelAlpha})`;
-    ctx.fillText(zone.label, 0, 0);
+    drawLabelBadge(ctx, zone.label, fontSize, labelAlpha);
 
     // Warning icon — shown only while the boundary is flashing, blinks with it
     // Matches the SVG triangle in SegmentationOverlay: points="0,-8 7,5 -7,5"
@@ -433,6 +484,8 @@ export function renderBoundaryOverlay(
       // Triangle vertices in SVG space: tip at (0,-8), br at (7,5), bl at (-7,5)
       // Place centroid to the left of the badge with an 8px gap
       const gap = 8;
+      // bw: width of the badge drawn above; position the triangle to its left
+      const bw = ctx.measureText(zone.label).width + overlayLabel.paddingX * 2;
       const cx2 = -bw / 2 - gap - 7 * scale2; // 7 = half-width in SVG space
 
       ctx.save();
@@ -483,10 +536,8 @@ export function renderLinesOverlay(
   height = MASK_HEIGHT,
   animManager?: BoundaryAnimationManager,
 ): void {
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext("2d")!;
-  ctx.clearRect(0, 0, width, height);
+  // Initialise canvas and obtain a clean 2-D context
+  const ctx = setupCanvas(canvas, width, height);
 
   const labelIndex = new Map<string, number>();
   let idx = 0;
@@ -494,14 +545,8 @@ export function renderLinesOverlay(
     if (!labelIndex.has(line.label)) labelIndex.set(line.label, idx++);
   }
 
-  const lineWidth =
-    annotationLine.lineWidth > 0
-      ? annotationLine.lineWidth
-      : Math.max(annotationLine.minWidth, Math.round(width / annotationLine.autoScaleDivisor));
-  const fontSize = Math.max(
-    overlayLabel.minFontSize,
-    Math.round(width / overlayLabel.autoScaleDivisor),
-  );
+  const lineWidth = getLineWidth(annotationLine, width);
+  const fontSize = getOverlayFontSize(width);
 
   ctx.lineJoin = "round";
 
@@ -560,29 +605,9 @@ export function renderLinesOverlay(
     const mx = smoothed.x;
     const my = smoothed.y;
     ctx.font = `${fontSize}px system-ui, sans-serif`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    const m = ctx.measureText(line.label);
-    const bw = m.width + overlayLabel.paddingX * 2;
-    const bh = fontSize + overlayLabel.paddingY * 2;
-
     ctx.save();
     ctx.translate(mx, my);
-
-    ctx.fillStyle = `rgba(0,0,0,${overlayLabel.backgroundOpacity})`;
-    ctx.beginPath();
-    ctx.roundRect(-bw / 2, -bh / 2, bw, bh, overlayLabel.borderRadius);
-    ctx.fill();
-
-    ctx.strokeStyle = `rgba(0,0,0,0)`;
-    ctx.lineWidth = overlayLabel.borderWidth;
-    ctx.beginPath();
-    ctx.roundRect(-bw / 2, -bh / 2, bw, bh, overlayLabel.borderRadius);
-    ctx.stroke();
-
-    ctx.fillStyle = `rgba(255,255,255,1)`;
-    ctx.fillText(line.label, 0, 0);
-
+    drawLabelBadge(ctx, line.label, fontSize);
     ctx.restore();
   }
 }

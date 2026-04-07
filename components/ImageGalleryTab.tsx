@@ -11,11 +11,48 @@ interface ImageEntry {
 
 const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp", "svg", "avif"]);
 
-export default function ImageGallery() {
+/**
+ * Renders a canvas-based overlay for a selected image frame and caches the
+ * result as a data-URL so the same frame is never decoded twice.
+ */
+function renderOverlayToUrl<T>(
+  enabled: boolean,
+  key: string | null,
+  data: T | undefined,
+  cache: Map<string, string>,
+  setUrl: (url: string | null) => void,
+  render: (canvas: HTMLCanvasElement, data: T) => void,
+): void {
+  if (!enabled || !key || data === undefined) {
+    setUrl(null);
+    return;
+  }
+  if (cache.has(key)) {
+    setUrl(cache.get(key)!);
+    return;
+  }
+  const canvas = document.createElement("canvas");
+  render(canvas, data);
+  const url = canvas.toDataURL();
+  cache.set(key, url);
+  setUrl(url);
+}
+
+interface ImageGalleryProps {
+  initialLabels?: Array<{ image: string; tags: SegmentationTag[] }>;
+  initialLabelPoints?: BoundaryRecord[];
+  initialDir?: string;
+}
+
+export default function ImageGalleryTab({
+  initialLabels = [],
+  initialLabelPoints = [],
+  initialDir = "",
+}: ImageGalleryProps) {
   const [images, setImages] = useState<ImageEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
-  const [folderName, setFolderName] = useState("D:\\Projects\\Features\\Feature_1");
+  const [folderName, setFolderName] = useState(initialDir);
   const [useFsApi, setUseFsApi] = useState(false);
   const objectUrlsRef = useRef<string[]>([]);
 
@@ -40,8 +77,14 @@ export default function ImageGallery() {
 
   const selected = selectedIndex !== null ? images[selectedIndex] ?? null : null;
 
+  /**
+   * Advances to the next image in the gallery, wrapping around at the end.
+   */
   const goNext = useCallback(() =>
     setSelectedIndex((i) => (i !== null ? (i + 1) % images.length : null)), [images.length]);
+  /**
+   * Steps back to the previous image in the gallery, wrapping at the start.
+   */
   const goPrev = useCallback(() =>
     setSelectedIndex((i) => (i !== null ? (i - 1 + images.length) % images.length : null)), [images.length]);
 
@@ -56,6 +99,11 @@ export default function ImageGallery() {
     return () => window.removeEventListener("keydown", onKey);
   }, [selectedIndex, goNext, goPrev]);
 
+  /**
+   * Converts a flat `labels.json` record array into a per-filename map and
+   * stores it in state.  Also resets the segmentation overlay so stale
+   * renders from a previous dataset are not shown.
+   */
   function loadLabelsFromRecords(records: { image: string; tags: SegmentationTag[] }[]) {
     const map: Record<string, SegmentationTag[]> = {};
     for (const rec of records) map[rec.image] = rec.tags;
@@ -65,6 +113,10 @@ export default function ImageGallery() {
     overlayCache.current.clear();
   }
 
+  /**
+   * Converts a flat `labels_points.json` record array into two per-filename
+   * maps (boundary zones and line annotations) and stores them in state.
+   */
   function loadBoundaryFromRecords(records: BoundaryRecord[]) {
     const boundaryMapNew: Record<string, BoundaryZone[]> = {};
     const linesMapNew: Record<string, LineAnnotation[]> = {};
@@ -125,43 +177,37 @@ export default function ImageGallery() {
 
   // Render boundary overlay when image or toggle changes
   useEffect(() => {
-    if (!showBoundary || !selectedName || !boundaryMap[selectedName]) {
-      setBoundaryUrl(null);
-      return;
-    }
-    if (boundaryCache.current.has(selectedName)) {
-      setBoundaryUrl(boundaryCache.current.get(selectedName)!);
-      return;
-    }
-    const canvas = document.createElement("canvas");
-    renderBoundaryOverlay(canvas, boundaryMap[selectedName]);
-    const url = canvas.toDataURL();
-    boundaryCache.current.set(selectedName, url);
-    setBoundaryUrl(url);
+    renderOverlayToUrl(
+      showBoundary,
+      selectedName,
+      selectedName != null ? boundaryMap[selectedName] : undefined,
+      boundaryCache.current,
+      setBoundaryUrl,
+      (canvas, zones) => renderBoundaryOverlay(canvas, zones),
+    );
   }, [showBoundary, selectedName, boundaryMap]);
 
   // Render lines overlay when image or toggle changes
   useEffect(() => {
-    if (!showLines || !selectedName || !linesMap[selectedName]) {
-      setLinesUrl(null);
-      return;
-    }
-    if (linesCache.current.has(selectedName)) {
-      setLinesUrl(linesCache.current.get(selectedName)!);
-      return;
-    }
-    const canvas = document.createElement("canvas");
-    renderLinesOverlay(canvas, linesMap[selectedName]);
-    const url = canvas.toDataURL();
-    linesCache.current.set(selectedName, url);
-    setLinesUrl(url);
+    renderOverlayToUrl(
+      showLines,
+      selectedName,
+      selectedName != null ? linesMap[selectedName] : undefined,
+      linesCache.current,
+      setLinesUrl,
+      (canvas, lines) => renderLinesOverlay(canvas, lines),
+    );
   }, [showLines, selectedName, linesMap]);
 
+  /** Revokes all object URLs created by the File System Access API picker to free memory. */
   function revokeAll() {
     objectUrlsRef.current.forEach((u) => URL.revokeObjectURL(u));
     objectUrlsRef.current = [];
   }
 
+  /**
+   * Loads images and annotation data for the current `folderName`.
+   */
   async function loadDefault() {
     setLoading(true);
     setUseFsApi(false);
@@ -179,28 +225,41 @@ export default function ImageGallery() {
     } finally {
       setLoading(false);
     }
-    // Load labels.json from folder or public/
-    try {
-      const url = folder
-        ? `/api/local-files?dir=${encodeURIComponent(folder)}&file=labels.json`
-        : "/api/labels";
-      const records = await fetch(url).then((r) => r.json());
-      if (Array.isArray(records)) loadLabelsFromRecords(records);
-    } catch {
-      setLabelsMap({});
+    // Use server-pre-fetched labels when no custom folder is set; otherwise fetch from the folder.
+    if (!folder && initialLabels.length > 0) {
+      loadLabelsFromRecords(initialLabels);
+    } else {
+      try {
+        const url = folder
+          ? `/api/local-files?dir=${encodeURIComponent(folder)}&file=labels.json`
+          : "/api/labels";
+        const records = await fetch(url).then((r) => r.json());
+        if (Array.isArray(records)) loadLabelsFromRecords(records);
+      } catch {
+        setLabelsMap({});
+      }
     }
-    // Load labels_points.json from folder or public/
-    try {
-      const url = folder
-        ? `/api/local-files?dir=${encodeURIComponent(folder)}&file=labels_points.json`
-        : "/api/labels-points";
-      const records = await fetch(url).then((r) => r.json());
-      if (Array.isArray(records)) loadBoundaryFromRecords(records);
-    } catch {
-      setBoundaryMap({});
+    // Use server-pre-fetched label-points when no custom folder is set; otherwise fetch from the folder.
+    if (!folder && initialLabelPoints.length > 0) {
+      loadBoundaryFromRecords(initialLabelPoints);
+    } else {
+      try {
+        const url = folder
+          ? `/api/local-files?dir=${encodeURIComponent(folder)}&file=labels_points.json`
+          : "/api/labels-points";
+        const records = await fetch(url).then((r) => r.json());
+        if (Array.isArray(records)) loadBoundaryFromRecords(records);
+      } catch {
+        setBoundaryMap({});
+      }
     }
   }
 
+  /**
+   * Opens a native directory picker (Chrome/Edge only via the File System
+   * Access API) and loads images plus annotation files directly from the
+   * chosen folder without routing through the Next.js server.
+   */
   async function handleChooseFolder() {
     if (!("showDirectoryPicker" in window)) {
       alert("Folder picker is not supported in this browser. Please use Chrome or Edge.");
@@ -400,7 +459,6 @@ export default function ImageGallery() {
                 onClick={(e) => e.stopPropagation()}
               />
               {showOverlay && overlayUrl && (
-                // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={overlayUrl}
                   alt=""
@@ -409,7 +467,6 @@ export default function ImageGallery() {
                 />
               )}
               {showLines && linesUrl && (
-                // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={linesUrl}
                   alt=""
@@ -418,7 +475,6 @@ export default function ImageGallery() {
                 />
               )}
               {showBoundary && boundaryUrl && (
-                // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={boundaryUrl}
                   alt=""

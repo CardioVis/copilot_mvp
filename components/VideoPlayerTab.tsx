@@ -29,13 +29,32 @@ interface FrameRleLabels {
   tags: SegmentationTag[];
 }
 
-export default function VideoPlayerTab() {
+interface VideoPlayerTabProps {
+  initialDir?: string;
+}
+
+// ── Canvas / frame utilities ────────────────────────────────────────────────────────
+
+/**
+ * Converts a video timestamp to a clamped integer index into a frame array.
+ * Clamps to [0, count−1] so callers never receive an out-of-bounds result.
+ */
+function timeToFrameIndex(currentTime: number, fps: number, count: number): number {
+  return Math.min(Math.max(Math.round(currentTime * fps), 0), count - 1);
+}
+
+/** Clears all pixels on a canvas element. */
+function clearCanvas(canvas: HTMLCanvasElement): void {
+  canvas.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
+}
+
+export default function VideoPlayerTab({ initialDir = "" }: VideoPlayerTabProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const animFrameRef = useRef<number>(0);
 
-  const [dirPath, setDirPath] = useState("D:\\Projects\\Features\\Feature_3");
+  const [dirPath, setDirPath] = useState(initialDir);
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
   const [frameLabels, setFrameLabels] = useState<FrameLabels[]>([]);
   const [playing, setPlaying] = useState(false);
@@ -64,7 +83,9 @@ export default function VideoPlayerTab() {
   const [isMouseOverVideo, setIsMouseOverVideo] = useState(false);
   const [frameRleLabels, setFrameRleLabels] = useState<FrameRleLabels[]>([]);
 
-  // Derive Zone[] from all frame labels for SideBar
+  // Derive Zone[] from all frame labels for SideBar.
+  // Counts how many frames each zone label appears in and converts that to a
+  // percentage accuracy score, then sorts zones by descending frequency.
   const detectedZones = useMemo((): Zone[] => {
     if (frameLabels.length === 0) return [];
     const countMap = new Map<string, number>();
@@ -83,7 +104,8 @@ export default function VideoPlayerTab() {
     return entries;
   }, [frameLabels]);
 
-  // Parse labels_points.json into frame labels
+  // Parses labels_points.json records into FrameLabels sorted by frame number.
+  // Extracts the first integer from each image filename as the frame index.
   const parseLabels = useCallback((records: BoundaryRecord[]) => {
     const parsed: FrameLabels[] = records.map((rec) => {
       const match = rec.image.match(/(\d+)/);
@@ -94,7 +116,8 @@ export default function VideoPlayerTab() {
     return parsed;
   }, []);
 
-  // Parse labels.json (RLE) into per-frame label data
+  // Parses labels.json (RLE segmentation) records into FrameRleLabels sorted
+  // by frame number, using the same filename-to-frame-number extraction.
   const parseRleLabels = useCallback(
     (records: Array<{ image: string; tags: SegmentationTag[] }>) => {
       const parsed: FrameRleLabels[] = records.map((rec) => {
@@ -108,7 +131,10 @@ export default function VideoPlayerTab() {
     []
   );
 
-  // Load from server API (local directory path)
+  // Loads video and annotation data for the current `dirPath` via the
+  // Next.js server API.  Checks the directory first, then streams
+  // labels_points.json, the optional labels.json, and sets the video source
+  // to the streaming endpoint so the browser never has to buffer the whole file.
   const loadFromServer = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -171,7 +197,9 @@ export default function VideoPlayerTab() {
     }
   }, [dirPath, parseLabels, parseRleLabels]);
 
-  // Load via File System Access API (browser picker)
+  // Loads video and annotation data by opening a native directory picker
+  // (Chrome/Edge File System Access API).  Creates an object URL for the video
+  // file so playback works without routing through the server API.
   const loadFromPicker = useCallback(async () => {
     if (!("showDirectoryPicker" in window)) {
       alert("Folder picker not supported. Use Chrome or Edge.");
@@ -240,6 +268,7 @@ export default function VideoPlayerTab() {
     }
   }, [parseLabels, parseRleLabels]);
 
+  /** Revokes the current video object URL (if any) to free memory. */
   function revokeObjectUrl() {
     if (objectUrlRef.current) {
       URL.revokeObjectURL(objectUrlRef.current);
@@ -255,6 +284,7 @@ export default function VideoPlayerTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /** Stores video dimensions and duration once the metadata has loaded. */
   const handleVideoLoaded = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -266,7 +296,8 @@ export default function VideoPlayerTab() {
     setDuration(video.duration);
   }, []);
 
-  // Find the label entry for a given video time
+  // Returns the zone array for the frame closest to the given playback time.
+  // Returns null when no label data is loaded.
   const getZonesForTime = useCallback(
     (time: number): BoundaryZone[] | null => {
       if (frameLabels.length === 0) return null;
@@ -280,7 +311,9 @@ export default function VideoPlayerTab() {
     [frameLabels, fps]
   );
 
-  // Render overlay on canvas matching current video time
+  // Draws the boundary-zone overlay on `canvasRef` for the current video frame.
+  // Also keeps the frame counter and visible-zone name set up to date on every
+  // call, even when the overlay is hidden, so the side-bar reflects live state.
   const renderOverlay = useCallback(() => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
@@ -315,7 +348,9 @@ export default function VideoPlayerTab() {
     renderBoundaryOverlay(canvas, zones, dimensions.width || 1920, dimensions.height || 1080, animManagerRef.current, showSafeZones);
   }, [showOverlay, getZonesForTime, dimensions, fps, frameLabels, showSafeZones]);
 
-  // Render line annotations overlay
+  // Draws line annotations onto `linesCanvasRef` for the current frame.
+  // Skips the render when the frame index has not changed since the last call
+  // to avoid redundant work during the rAF loop.
   const renderLinesOverlayCallback = useCallback(() => {
     const video = videoRef.current;
     const canvas = linesCanvasRef.current;
@@ -323,39 +358,30 @@ export default function VideoPlayerTab() {
 
     if (!video || !videoSrc || !showLines || frameLabels.length === 0) {
       if (lastLinesFrameIndexRef.current !== -1) {
-        const ctx = canvas.getContext("2d");
-        ctx?.clearRect(0, 0, canvas.width, canvas.height);
+        clearCanvas(canvas);
         lastLinesFrameIndexRef.current = -1;
       }
       return;
     }
 
-    const frameIndex = Math.round(video.currentTime * fps);
-    const idx = Math.min(Math.max(frameIndex, 0), frameLabels.length - 1);
+    const idx = timeToFrameIndex(video.currentTime, fps, frameLabels.length);
     if (idx === lastLinesFrameIndexRef.current) return;
     lastLinesFrameIndexRef.current = idx;
 
     const entry = frameLabels[idx];
     if (!entry || entry.lines.length === 0) {
-      const ctx = canvas.getContext("2d");
-      ctx?.clearRect(0, 0, canvas.width, canvas.height);
+      clearCanvas(canvas);
       linesAnimManagerRef.current.update(new Set(), video.currentTime);
       return;
     }
 
     const visibleLineLabels = new Set(entry.lines.map((l) => l.label));
     linesAnimManagerRef.current.update(visibleLineLabels, video.currentTime);
-
-    renderLinesOverlay(
-      canvas,
-      entry.lines,
-      dimensions.width || 1920,
-      dimensions.height || 1080,
-      linesAnimManagerRef.current
-    );
+    renderLinesOverlay(canvas, entry.lines, dimensions.width || 1920, dimensions.height || 1080, linesAnimManagerRef.current);
   }, [showLines, frameLabels, fps, dimensions, videoSrc]);
 
-  // Render RLE segmentation labels on the labels canvas
+  // Draws RLE segmentation masks onto `labelsCanvasRef` for the current frame.
+  // Same skip-if-unchanged optimisation as renderLinesOverlayCallback.
   const renderLabelsOverlay = useCallback(() => {
     const video = videoRef.current;
     const canvas = labelsCanvasRef.current;
@@ -363,34 +389,28 @@ export default function VideoPlayerTab() {
 
     if (!video || !videoSrc || !showLabels || frameRleLabels.length === 0) {
       if (lastLabelFrameIndexRef.current !== -1) {
-        const ctx = canvas.getContext("2d");
-        ctx?.clearRect(0, 0, canvas.width, canvas.height);
+        clearCanvas(canvas);
         lastLabelFrameIndexRef.current = -1;
       }
       return;
     }
 
-    const frameIndex = Math.round(video.currentTime * fps);
-    const idx = Math.min(Math.max(frameIndex, 0), frameRleLabels.length - 1);
+    const idx = timeToFrameIndex(video.currentTime, fps, frameRleLabels.length);
     if (idx === lastLabelFrameIndexRef.current) return;
     lastLabelFrameIndexRef.current = idx;
 
     const entry = frameRleLabels[idx];
     if (!entry || entry.tags.length === 0) {
-      const ctx = canvas.getContext("2d");
-      ctx?.clearRect(0, 0, canvas.width, canvas.height);
+      clearCanvas(canvas);
       return;
     }
 
-    renderSegmentationOverlay(
-      canvas,
-      entry.tags,
-      dimensions.width || 1920,
-      dimensions.height || 1080
-    );
+    renderSegmentationOverlay(canvas, entry.tags, dimensions.width || 1920, dimensions.height || 1080);
   }, [showLabels, frameRleLabels, fps, dimensions, videoSrc]);
 
-  // Animation loop for overlay
+  // Drives all three overlay renders and the current-time state on every
+  // animation frame while video is loaded.  The loop is torn down and
+  // restarted whenever the video source changes.
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !videoSrc) return;
@@ -413,7 +433,7 @@ export default function VideoPlayerTab() {
     };
   }, [videoSrc, renderOverlay, renderLabelsOverlay, renderLinesOverlayCallback]);
 
-  // Play / Pause
+  // Toggles play/pause on the video element and mirrors the state into React.
   const togglePlay = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -427,7 +447,8 @@ export default function VideoPlayerTab() {
     }
   }, []);
 
-  // Keyboard shortcut: Space or K toggles play/pause
+  // Global keyboard shortcut: Space or K toggles play/pause,
+  // ignored when focus is inside an input or textarea.
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName;
@@ -441,6 +462,7 @@ export default function VideoPlayerTab() {
     return () => window.removeEventListener("keydown", handleKey);
   }, [togglePlay]);
 
+  /** Resets the playing state when the video reaches the end. */
   const handleVideoEnded = useCallback(() => setPlaying(false), []);
 
   return (
@@ -714,6 +736,7 @@ export default function VideoPlayerTab() {
   );
 }
 
+/** Formats a duration in seconds as `m:ss`. Returns `"0:00"` for non-finite values. */
 function formatTime(seconds: number): string {
   if (!isFinite(seconds)) return "0:00";
   const m = Math.floor(seconds / 60);

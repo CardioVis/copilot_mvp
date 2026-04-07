@@ -1,5 +1,3 @@
-"use client";
-
 import { Zone } from "@/lib/types";
 import { classifyZone } from "@/lib/ZoneFactory";
 
