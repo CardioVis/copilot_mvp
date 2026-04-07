@@ -7,10 +7,10 @@ import {
 } from "./overlayConfig";
 import { BoundaryAnimationManager } from "./BoundaryAnimationManager";
 import { classifyZone } from "./ZoneFactory";
-import { SafeZone, DangerZone, OtherZone } from "./types";
-import { parseHex, lerpRgb } from "./colors";
+import { SafeZone, DangerZone, OtherZone, HiddenZone } from "./types";
+import { parseHex, lerpRgb } from "./ImageTools";
 import {
-  getMaskColor,
+  getColor,
   setupCanvas,
   getOverlayFontSize,
   getLineWidth,
@@ -18,18 +18,19 @@ import {
   MASK_WIDTH,
   MASK_HEIGHT,
   type MaskColor,
-} from "./rleDecoder";
+} from "./ImageTools";
 
 // Derive boundary colors directly from the class defaults so any change there
 // is automatically reflected here.
 const _safe = new SafeZone("", "");
 const _danger = new DangerZone("", "");
 const _other = new OtherZone("", "");
+const _hidden = new HiddenZone("", "");
 const CLASSIFIED_COLORS: Record<string, MaskColor> = {
   danger:  parseHex(_danger.color),
   safe:    parseHex(_safe.color),
   other:   parseHex(_other.color),
-  unknown: { r: 180, g: 100, b: 255 },
+  unknown: parseHex(_hidden.color),
 };
 
 export interface BoundaryZone {
@@ -210,7 +211,7 @@ export function renderLinesOverlay(
 
   for (const line of lines) {
     if (line.points.length < 2) continue;
-    const color = getMaskColor(line.label, labelIndex.get(line.label)!);
+    const color = getColor(line.label, labelIndex.get(line.label)!);
 
     const area = annotationLine.area;
     if (area.bands > 0 && area.width > 0) {

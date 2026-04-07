@@ -155,3 +155,32 @@ export const annotationLine = {
     opacity: 0.12,
   },
 };
+
+// ── Label colour maps (moved from rleDecoder.ts) ─────────────────────────────
+
+/** Curated per-label colours (CSS hex) used by overlays. */
+export const KNOWN_COLORS: Record<string, string> = {
+  "Phrenic nerve": "#3296FF",
+  Grasper: "#32DC64",
+  Pericardium: "#FF5050",
+  "Epicardial adipose tissue": "#F97316",
+  "Incision line": "#32DC50",
+  Centerline: "#32DC50",
+  "Anterior MV (A1)": "#0096C8",
+  "Anterior MV (A2)": "#00E6C8",
+  "MV anterior annulus": "#ADFF2F",
+  "MV posterior annulus": "#2DD4BF",
+  "Native Chordae": "#FFC300",
+  "Posterior MV (P1)": "#FF5A5A",
+  "Posterior MV (P2)": "#FF8246",
+  "Posterior MV (P3)": "#FF6EB4",
+  "Posterior Papillary Muscle MV": "#7D4BFF",
+};
+
+/** Fallback palette (cycled for unknown labels). */
+export const EXTRA_COLORS: string[] = [
+  "#B464FF",
+  "#FFA032",
+  "#64FFFF",
+  "#FF64C8",
+];

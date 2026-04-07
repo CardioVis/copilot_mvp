@@ -1,14 +1,70 @@
 import { IGNORED_LABELS, segmentationMask } from "./overlayConfig";
 import {
-  decodeRLE,
-  getMaskColor,
+  getColor,
   setupCanvas,
   getOverlayFontSize,
   drawLabelBadge,
   MASK_WIDTH,
   MASK_HEIGHT,
   type MaskColor,
-} from "./rleDecoder";
+} from "./ImageTools";
+
+// Decode RLE moved here from the previous rle decoder module
+class BitInputStream {
+  private bytes: number[];
+  private bitPos = 0;
+
+  constructor(bytes: number[]) {
+    this.bytes = bytes;
+  }
+
+  read(numBits: number): number {
+    let value = 0;
+    for (let i = 0; i < numBits; i++) {
+      const byteIndex = this.bitPos >> 3;
+      const bitIndex = 7 - (this.bitPos & 7);
+      if (byteIndex < this.bytes.length) {
+        value = (value << 1) | ((this.bytes[byteIndex] >> bitIndex) & 1);
+      } else {
+        value <<= 1;
+      }
+      this.bitPos++;
+    }
+    return value;
+  }
+}
+
+export function decodeRLE(rle: number[]): Uint8Array {
+  const input = new BitInputStream(rle);
+  const num = input.read(32);
+  const wordSize = input.read(5) + 1;
+  const rleSizes: number[] = [];
+  for (let k = 0; k < 4; k++) {
+    rleSizes.push(input.read(4) + 1);
+  }
+
+  const out = new Uint8Array(num);
+  let i = 0;
+  while (i < num) {
+    const x = input.read(1);
+    const sizeIdx = input.read(2);
+    const runLen = input.read(rleSizes[sizeIdx]);
+    const j = i + 1 + runLen;
+    if (x) {
+      const val = input.read(wordSize);
+      out.fill(val, i, Math.min(j, num));
+      i = j;
+    } else {
+      const end = Math.min(j, num);
+      while (i < end) {
+        out[i] = input.read(wordSize);
+        i++;
+      }
+    }
+  }
+
+  return out;
+}
 
 export interface SegmentationTag {
   label: string;
@@ -75,7 +131,7 @@ export function renderSegmentationOverlay(
 
   for (const [label] of labelIndex) {
     const { mask } = perLabel.get(label)!;
-    const color = getMaskColor(label, labelIndex.get(label)!);
+    const color = getColor(label, labelIndex.get(label)!);
     for (let i = 0; i < totalPixels; i++) {
       if (mask[i]) {
         const off = i * 4;
@@ -94,7 +150,7 @@ export function renderSegmentationOverlay(
     if (entry.count === 0) continue;
     masks.push({
       label,
-      color: getMaskColor(label, labelIndex.get(label)!),
+      color: getColor(label, labelIndex.get(label)!),
       cx: entry.sumX / entry.count,
       cy: entry.sumY / entry.count,
     });

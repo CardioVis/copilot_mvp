@@ -12,7 +12,7 @@ import {
   renderSegmentationOverlay,
   SegmentationTag,
 } from "@/lib/segmentationOverlay";
-import { getMaskColor, type MaskColor } from "@/lib/rleDecoder";
+import { getColor, type MaskColor } from "@/lib/ImageTools";
 import SideBar from "@/components/SideBar";
 import { Zone } from "@/lib/types";
 import { BoundaryAnimationManager } from "@/lib/BoundaryAnimationManager";
