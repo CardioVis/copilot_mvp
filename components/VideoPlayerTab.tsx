@@ -14,7 +14,8 @@ import {
 } from "@/lib/rleDecoder";
 import SideBar from "@/components/SideBar";
 import { Zone, SafeMargin } from "@/lib/types";
-import { BoundaryAnimationManager, createClassifiedZone } from "@/lib/BoundaryAnimationManager";
+import { BoundaryAnimationManager } from "@/lib/BoundaryAnimationManager";
+import { createClassifiedZone } from "@/lib/ZoneFactory";
 
 interface FrameLabels {
   /** frame number extracted from image name */

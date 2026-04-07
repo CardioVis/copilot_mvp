@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Zone, SafeMargin, ZoneFillStyle } from "@/lib/types";
-import { serializeZones, deserializeZones, serializeSafeZones, deserializeSafeZones } from "@/lib/zoneSerializer";
 import { safeZoneLine, safeZoneArea } from "@/lib/zoneStyles";
+import { ZonePersistenceService } from "@/lib/services/ZonePersistenceService";
+import { useZoneEditor } from "@/contexts/ZoneEditorContext";
 
 const DEFAULT_SCRIPT_URL =
   "https://script.google.com/macros/s/AKfycbwsrp7iUZZN2UJaIRfyER9YNDqF2pIiHAPJtBq_fUQTTGt0a8LWO1RFTExwV-kI4uMyTA/exec";
@@ -25,31 +26,24 @@ const FILL_STYLES: { value: ZoneFillStyle; label: string }[] = [
   { value: "dashed", label: "Dashed" },
 ];
 
-interface ZoneEditorPanelProps {
-  zones: Zone[];
-  safeZones: SafeMargin[];
-  activeZoneId: string | null;
-  editMode: boolean;
-  onSetZones: (zones: Zone[]) => void;
-  onSetSafeZones: (safeZones: SafeMargin[]) => void;
-  onSetActiveZoneId: (id: string | null) => void;
-  onSetEditMode: (mode: boolean) => void;
-}
+export default function ZoneEditorPanel() {
+  const {
+    zones,
+    safeZones,
+    activeZoneId,
+    editMode,
+    setZones,
+    setSafeZones,
+    setActiveZoneId,
+    setEditMode,
+  } = useZoneEditor();
 
-export default function ZoneEditorPanel({
-  zones,
-  safeZones,
-  activeZoneId,
-  editMode,
-  onSetZones,
-  onSetSafeZones,
-  onSetActiveZoneId,
-  onSetEditMode,
-}: ZoneEditorPanelProps) {
   const [scriptUrl, setScriptUrl] = useState(DEFAULT_SCRIPT_URL);
   const [syncStatus, setSyncStatus] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const didAutoLoad = useRef(false);
+
+  const persistence = useMemo(() => new ZonePersistenceService(scriptUrl), [scriptUrl]);
 
   const activeZone = zones.find((z) => z.id === activeZoneId);
   const activeSafeZone = safeZones.find((z) => z.id === activeZoneId);
@@ -61,25 +55,19 @@ export default function ZoneEditorPanel({
     didAutoLoad.current = true;
     (async () => {
       try {
-        const res = await fetch(
-          `/api/drive?scriptUrl=${encodeURIComponent(scriptUrl.trim())}`
-        );
-        if (!res.ok) return;
-        const text = await res.text();
-        const parsed = deserializeZones(text);
-        const parsedSafe = deserializeSafeZones(text);
+        const { zones: parsed, safeZones: parsedSafe } = await persistence.readFromDrive();
         if (parsed.length > 0 || parsedSafe.length > 0) {
-          onSetZones(parsed);
-          onSetSafeZones(parsedSafe);
-          if (parsed.length > 0) onSetActiveZoneId(parsed[0].id);
-          else if (parsedSafe.length > 0) onSetActiveZoneId(parsedSafe[0].id);
+          setZones(parsed);
+          setSafeZones(parsedSafe);
+          if (parsed.length > 0) setActiveZoneId(parsed[0].id);
+          else if (parsedSafe.length > 0) setActiveZoneId(parsedSafe[0].id);
           setSyncStatus(`Auto-loaded ${parsed.length} zone(s), ${parsedSafe.length} safe zone(s)`);
         }
       } catch {
         // silent — auto-load is best-effort
       }
     })();
-  }, [scriptUrl, onSetZones, onSetActiveZoneId]);
+  }, [scriptUrl, persistence, setZones, setSafeZones, setActiveZoneId]);
 
   const addZone = () => {
     const newZone: Zone = {
@@ -90,18 +78,18 @@ export default function ZoneEditorPanel({
       points: [],
       visible: true,
     };
-    onSetZones([...zones, newZone]);
-    onSetActiveZoneId(newZone.id);
-    onSetEditMode(true);
+    setZones([...zones, newZone]);
+    setActiveZoneId(newZone.id);
+    setEditMode(true);
   };
 
   const deleteZone = (id: string) => {
-    onSetZones(zones.filter((z) => z.id !== id));
-    if (activeZoneId === id) onSetActiveZoneId(null);
+    setZones(zones.filter((z) => z.id !== id));
+    if (activeZoneId === id) setActiveZoneId(null);
   };
 
   const updateZone = (id: string, updates: Partial<Zone>) => {
-    onSetZones(zones.map((z) => (z.id === id ? { ...z, ...updates } : z)));
+    setZones(zones.map((z) => (z.id === id ? { ...z, ...updates } : z)));
   };
 
   const addSafeZone = () => {
@@ -118,18 +106,25 @@ export default function ZoneEditorPanel({
       areaWidth: safeZoneArea.width,
       areaOpacity: safeZoneArea.opacity,
     };
-    onSetSafeZones([...safeZones, newSz]);
-    onSetActiveZoneId(newSz.id);
-    onSetEditMode(true);
+    setSafeZones([...safeZones, newSz]);
+    setActiveZoneId(newSz.id);
+    setEditMode(true);
   };
 
   const deleteSafeZone = (id: string) => {
-    onSetSafeZones(safeZones.filter((z) => z.id !== id));
-    if (activeZoneId === id) onSetActiveZoneId(null);
+    setSafeZones(safeZones.filter((z) => z.id !== id));
+    if (activeZoneId === id) setActiveZoneId(null);
   };
 
   const updateSafeZone = (id: string, updates: Partial<SafeMargin>) => {
-    onSetSafeZones(safeZones.map((z) => (z.id === id ? { ...z, ...updates } : z)));
+    setSafeZones(safeZones.map((z) => (z.id === id ? { ...z, ...updates } : z)));
+  };
+
+  const applyLoadedData = (parsed: { zones: Zone[]; safeZones: SafeMargin[] }) => {
+    setZones(parsed.zones);
+    setSafeZones(parsed.safeZones);
+    if (parsed.zones.length > 0) setActiveZoneId(parsed.zones[0].id);
+    else if (parsed.safeZones.length > 0) setActiveZoneId(parsed.safeZones[0].id);
   };
 
   const readFromDrive = async () => {
@@ -137,18 +132,9 @@ export default function ZoneEditorPanel({
     setIsLoading(true);
     setSyncStatus("Reading…");
     try {
-      const res = await fetch(
-        `/api/drive?scriptUrl=${encodeURIComponent(scriptUrl.trim())}`
-      );
-      if (!res.ok) throw new Error(await res.text());
-      const text = await res.text();
-      const parsed = deserializeZones(text);
-      const parsedSafe = deserializeSafeZones(text);
-      onSetZones(parsed);
-      onSetSafeZones(parsedSafe);
-      setSyncStatus(`Loaded ${parsed.length} zone(s), ${parsedSafe.length} safe zone(s)`);
-      if (parsed.length > 0) onSetActiveZoneId(parsed[0].id);
-      else if (parsedSafe.length > 0) onSetActiveZoneId(parsedSafe[0].id);
+      const data = await persistence.readFromDrive();
+      applyLoadedData(data);
+      setSyncStatus(`Loaded ${data.zones.length} zone(s), ${data.safeZones.length} safe zone(s)`);
     } catch (err) {
       setSyncStatus(
         `Error: ${err instanceof Error ? err.message : "Unknown"}`
@@ -163,14 +149,7 @@ export default function ZoneEditorPanel({
     setIsLoading(true);
     setSyncStatus("Writing…");
     try {
-      const parts = [serializeZones(zones), serializeSafeZones(safeZones)].filter(Boolean);
-      const content = parts.join("\n\n");
-      const res = await fetch("/api/drive", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scriptUrl: scriptUrl.trim(), content }),
-      });
-      if (!res.ok) throw new Error(await res.text());
+      await persistence.writeToDrive(zones, safeZones);
       setSyncStatus("Saved to Drive ✓");
     } catch (err) {
       setSyncStatus(
@@ -182,21 +161,15 @@ export default function ZoneEditorPanel({
   };
 
   const exportToClipboard = () => {
-    const parts = [serializeZones(zones), serializeSafeZones(safeZones)].filter(Boolean);
-    navigator.clipboard.writeText(parts.join("\n\n"));
+    persistence.exportToClipboard(zones, safeZones);
     setSyncStatus("Copied to clipboard");
   };
 
   const importFromClipboard = async () => {
     try {
-      const text = await navigator.clipboard.readText();
-      const parsed = deserializeZones(text);
-      const parsedSafe = deserializeSafeZones(text);
-      onSetZones(parsed);
-      onSetSafeZones(parsedSafe);
-      setSyncStatus(`Imported ${parsed.length} zone(s), ${parsedSafe.length} safe zone(s)`);
-      if (parsed.length > 0) onSetActiveZoneId(parsed[0].id);
-      else if (parsedSafe.length > 0) onSetActiveZoneId(parsedSafe[0].id);
+      const data = await persistence.importFromClipboard();
+      applyLoadedData(data);
+      setSyncStatus(`Imported ${data.zones.length} zone(s), ${data.safeZones.length} safe zone(s)`);
     } catch {
       setSyncStatus("Failed to read clipboard");
     }
@@ -210,7 +183,7 @@ export default function ZoneEditorPanel({
           Danger Zones
         </h3>
         <button
-          onClick={() => onSetEditMode(!editMode)}
+          onClick={() => setEditMode(!editMode)}
           className={`rounded px-2 py-0.5 text-xs font-medium transition-colors ${
             editMode
               ? "bg-amber-500/20 text-amber-400"
@@ -226,7 +199,7 @@ export default function ZoneEditorPanel({
         {zones.map((zone) => (
           <div
             key={zone.id}
-            onClick={() => onSetActiveZoneId(zone.id)}
+            onClick={() => setActiveZoneId(zone.id)}
             className={`flex items-center gap-2 rounded px-2 py-1.5 text-xs cursor-pointer transition-colors ${
               zone.id === activeZoneId
                 ? "bg-zinc-800 text-zinc-200"
@@ -363,7 +336,7 @@ export default function ZoneEditorPanel({
         {safeZones.map((sz) => (
           <div
             key={sz.id}
-            onClick={() => onSetActiveZoneId(sz.id)}
+            onClick={() => setActiveZoneId(sz.id)}
             className={`flex items-center gap-2 rounded px-2 py-1.5 text-xs cursor-pointer transition-colors ${
               sz.id === activeZoneId
                 ? "bg-zinc-800 text-zinc-200"

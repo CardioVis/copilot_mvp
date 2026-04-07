@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Point, Zone, SafeMargin } from "@/lib/types";
+import { Point } from "@/lib/types";
 import {
   hatch,
   safeZoneLine,
@@ -14,32 +14,23 @@ import {
   getStrokeDasharray,
   getStrokeOpacity,
 } from "@/lib/zoneStyles";
+import { centroidOf, findInsertIndex, findLineInsertIndex, closestEdgePoint } from "@/lib/geometry";
+import { lerpHexColor } from "@/lib/colors";
+import { useZoneEditor } from "@/contexts/ZoneEditorContext";
 
-interface SegmentationOverlayProps {
-  zones: Zone[];
-  safeZones: SafeMargin[];
-  activeZoneId: string | null;
-  editMode: boolean;
-  onUpdateZone: (zoneId: string, updates: Partial<Zone>) => void;
-  onUpdateSafeZone: (zoneId: string, updates: Partial<SafeMargin>) => void;
-  animGroupOpacity?: number;
-  labelScale: number;
-  showDangerIcon: boolean;
-  dangerBlinkOn: boolean;
-}
-
-export default function SegmentationOverlay({
-  zones,
-  safeZones,
-  activeZoneId,
-  editMode,
-  onUpdateZone,
-  onUpdateSafeZone,
-  animGroupOpacity,
-  labelScale,
-  showDangerIcon,
-  dangerBlinkOn,
-}: SegmentationOverlayProps) {
+export default function SegmentationOverlay() {
+  const {
+    zones,
+    safeZones,
+    activeZoneId,
+    editMode,
+    updateZone,
+    updateSafeZone,
+    animGroupOpacity,
+    labelScale,
+    showDangerIcon,
+    dangerBlinkOn,
+  } = useZoneEditor();
   const svgRef = useRef<SVGSVGElement>(null);
   const [dragging, setDragging] = useState<{
     zoneId: string;
@@ -108,11 +99,11 @@ export default function SegmentationOverlay({
       const zone = zones.find((z) => z.id === dragging.zoneId);
       if (zone) {
         if (dragging.isLabel) {
-          onUpdateZone(dragging.zoneId, { labelPos: n });
+          updateZone(dragging.zoneId, { labelPos: n });
         } else if (dragging.pointIndex !== undefined) {
           const pts = [...zone.points];
           pts[dragging.pointIndex] = n;
-          onUpdateZone(dragging.zoneId, { points: pts });
+          updateZone(dragging.zoneId, { points: pts });
         }
         return;
       }
@@ -120,15 +111,15 @@ export default function SegmentationOverlay({
       const sz = safeZones.find((z) => z.id === dragging.zoneId);
       if (sz) {
         if (dragging.isLabel) {
-          onUpdateSafeZone(dragging.zoneId, { labelPos: n });
+          updateSafeZone(dragging.zoneId, { labelPos: n });
         } else if (dragging.pointIndex !== undefined) {
           const pts = [...sz.points];
           pts[dragging.pointIndex] = n;
-          onUpdateSafeZone(dragging.zoneId, { points: pts });
+          updateSafeZone(dragging.zoneId, { points: pts });
         }
       }
     },
-    [dragging, zones, safeZones, svgCoords, norm, onUpdateZone, onUpdateSafeZone]
+    [dragging, zones, safeZones, svgCoords, norm, updateZone, updateSafeZone]
   );
 
   const handlePointerUp = useCallback((e: React.PointerEvent) => {
@@ -150,7 +141,7 @@ export default function SegmentationOverlay({
         const pts = [...zone.points];
         const idx = findInsertIndex(pts, n);
         pts.splice(idx, 0, n);
-        onUpdateZone(activeZoneId, { points: pts });
+        updateZone(activeZoneId, { points: pts });
         return;
       }
 
@@ -164,10 +155,10 @@ export default function SegmentationOverlay({
           const idx = findLineInsertIndex(pts, n);
           pts.splice(idx, 0, n);
         }
-        onUpdateSafeZone(activeZoneId, { points: pts });
+        updateSafeZone(activeZoneId, { points: pts });
       }
     },
-    [editMode, activeZoneId, dragging, zones, safeZones, svgCoords, norm, onUpdateZone, onUpdateSafeZone]
+    [editMode, activeZoneId, dragging, zones, safeZones, svgCoords, norm, updateZone, updateSafeZone]
   );
 
   const handlePointContext = useCallback(
@@ -176,15 +167,15 @@ export default function SegmentationOverlay({
       e.stopPropagation();
       const zone = zones.find((z) => z.id === zoneId);
       if (zone) {
-        onUpdateZone(zoneId, { points: zone.points.filter((_, i) => i !== idx) });
+        updateZone(zoneId, { points: zone.points.filter((_, i) => i !== idx) });
         return;
       }
       const sz = safeZones.find((z) => z.id === zoneId);
       if (sz) {
-        onUpdateSafeZone(zoneId, { points: sz.points.filter((_, i) => i !== idx) });
+        updateSafeZone(zoneId, { points: sz.points.filter((_, i) => i !== idx) });
       }
     },
-    [zones, safeZones, onUpdateZone, onUpdateSafeZone]
+    [zones, safeZones, updateZone, updateSafeZone]
   );
 
   const ready = dims.w > 0 && dims.h > 0;
@@ -451,7 +442,7 @@ export default function SegmentationOverlay({
                 return Array.from({ length: bands }, (_, i) => {
                   const t = i / (bands - 1); // 0 = outermost, 1 = innermost
                   const w = sz.areaWidth * (1 - t * 0.7); // outer is full width, inner shrinks
-                  const color = lerpColor(outerColor, innerColor, t);
+                  const color = lerpHexColor(outerColor, innerColor, t);
                   const opacity = sz.areaOpacity * (0.4 + 0.6 * t); // outer more transparent
                   return (
                     <polyline
@@ -567,101 +558,6 @@ export default function SegmentationOverlay({
 
 /* ── helpers ── */
 
-function centroidOf(pts: { x: number; y: number }[]) {
-  const s = pts.reduce(
-    (a, p) => ({ x: a.x + p.x, y: a.y + p.y }),
-    { x: 0, y: 0 }
-  );
-  return { x: s.x / pts.length, y: s.y / pts.length };
-}
-
-function findInsertIndex(points: Point[], pt: Point): number {
-  if (points.length < 2) return points.length;
-  let min = Infinity;
-  let idx = points.length;
-  for (let i = 0; i < points.length; i++) {
-    const j = (i + 1) % points.length;
-    const d = segDist(pt, points[i], points[j]);
-    if (d < min) {
-      min = d;
-      idx = j === 0 ? points.length : j;
-    }
-  }
-  return idx;
-}
-
-function segDist(p: Point, a: Point, b: Point): number {
-  const dx = b.x - a.x,
-    dy = b.y - a.y;
-  const lenSq = dx * dx + dy * dy;
-  if (lenSq === 0) return Math.hypot(p.x - a.x, p.y - a.y);
-  const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / lenSq));
-  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
-}
-
 function hatchPatternId(zoneId: string): string {
   return `zone-hatch-${zoneId.replace(/[^a-zA-Z0-9_-]/g, "")}`;
-}
-
-/** For open polylines (safe zones): find the best segment to insert a new point into. */
-function findLineInsertIndex(points: Point[], pt: Point): number {
-  if (points.length < 2) return points.length;
-  let min = Infinity;
-  let idx = points.length; // default: append
-  for (let i = 0; i < points.length - 1; i++) {
-    const d = segDist(pt, points[i], points[i + 1]);
-    if (d < min) {
-      min = d;
-      idx = i + 1;
-    }
-  }
-  // Also check if appending to end or prepending is closer
-  const dEnd = Math.hypot(pt.x - points[points.length - 1].x, pt.y - points[points.length - 1].y);
-  const dStart = Math.hypot(pt.x - points[0].x, pt.y - points[0].y);
-  if (dEnd < min) return points.length;
-  if (dStart < min) return 0;
-  return idx;
-}
-
-type XY = { x: number; y: number };
-
-/** Find where the ray from `from` toward `to` first intersects the polygon edge. */
-function closestEdgePoint(from: XY, to: XY, polygon: XY[]): XY {
-  let best: XY = to;
-  let bestT = Infinity;
-  const dx = to.x - from.x;
-  const dy = to.y - from.y;
-  for (let i = 0; i < polygon.length; i++) {
-    const a = polygon[i];
-    const b = polygon[(i + 1) % polygon.length];
-    const ex = b.x - a.x;
-    const ey = b.y - a.y;
-    const denom = dx * ey - dy * ex;
-    if (Math.abs(denom) < 1e-10) continue;
-    const t = ((a.x - from.x) * ey - (a.y - from.y) * ex) / denom;
-    const u = ((a.x - from.x) * dy - (a.y - from.y) * dx) / denom;
-    if (t > 0 && u >= 0 && u <= 1 && t < bestT) {
-      bestT = t;
-      best = { x: from.x + t * dx, y: from.y + t * dy };
-    }
-  }
-  return best;
-}
-
-/** Linearly interpolate between two hex colors. t=0 returns a, t=1 returns b. */
-function lerpColor(a: string, b: string, t: number): string {
-  const pa = parseHex(a), pb = parseHex(b);
-  const r = Math.round(pa.r + (pb.r - pa.r) * t);
-  const g = Math.round(pa.g + (pb.g - pa.g) * t);
-  const bl = Math.round(pa.b + (pb.b - pa.b) * t);
-  return `rgb(${r},${g},${bl})`;
-}
-
-function parseHex(hex: string) {
-  const h = hex.replace("#", "");
-  return {
-    r: parseInt(h.substring(0, 2), 16),
-    g: parseInt(h.substring(2, 4), 16),
-    b: parseInt(h.substring(4, 6), 16),
-  };
 }

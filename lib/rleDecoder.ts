@@ -14,14 +14,12 @@ import {
   IGNORED_LABELS,
 } from "./overlayConfig";
 import type { ZoneRenderHint } from "./BoundaryAnimationManager";
-import { classifyZone, BoundaryAnimationManager } from "./BoundaryAnimationManager";
+import { BoundaryAnimationManager } from "./BoundaryAnimationManager";
+import { classifyZone } from "./ZoneFactory";
 import { SafeZone, DangerZone, OtherZone } from "./types";
+import { type RgbColor, parseHex, lerpRgb } from "./colors";
 
-/** Parse a CSS hex color string into an RGB triple. */
-function hexToRgb(hex: string): LabelColor {
-  const n = parseInt(hex.replace("#", ""), 16);
-  return { r: (n >> 16) & 0xff, g: (n >> 8) & 0xff, b: n & 0xff };
-}
+export type LabelColor = RgbColor;
 
 // Derive boundary colors directly from the class defaults so any change there
 // is automatically reflected here.
@@ -29,9 +27,9 @@ const _safe = new SafeZone("", "");
 const _danger = new DangerZone("", "");
 const _other = new OtherZone("", "");
 const CLASSIFIED_COLORS: Record<string, LabelColor> = {
-  danger:  hexToRgb(_danger.color),
-  safe:    hexToRgb(_safe.color),
-  other:   hexToRgb(_other.color), 
+  danger:  parseHex(_danger.color),
+  safe:    parseHex(_safe.color),
+  other:   parseHex(_other.color), 
   unknown: { r: 180, g: 100, b: 255 },
 };
 
@@ -100,12 +98,6 @@ export function decodeRLE(rle: number[]): Uint8Array {
 
 // ── Label colours ─────────────────────────────────────────────────────────────
 
-export interface LabelColor {
-  r: number;
-  g: number;
-  b: number;
-}
-
 const KNOWN_COLORS: Record<string, LabelColor> = {
   "Phrenic nerve": { r: 50, g: 150, b: 255 },
   Grasper: { r: 50, g: 220, b: 100 },
@@ -126,13 +118,7 @@ const KNOWN_COLORS: Record<string, LabelColor> = {
   "Posterior Papillary Muscle MV": { r: 125, g: 75, b: 255 }, // violet
 };
 
-function lerpColor(a: LabelColor, b: LabelColor, t: number): LabelColor {
-  return {
-    r: Math.round(a.r + (b.r - a.r) * t),
-    g: Math.round(a.g + (b.g - a.g) * t),
-    b: Math.round(a.b + (b.b - a.b) * t),
-  };
-}
+// Use lerpRgb from colors.ts (imported above)
 
 const EXTRA_COLORS: LabelColor[] = [
   { r: 180, g: 100, b: 255 },
@@ -531,14 +517,14 @@ export function renderLinesOverlay(
     // Area gradient bands (drawn beneath the main line)
     const area = annotationLine.area;
     if (area.bands > 0 && area.width > 0) {
-      const outerRgb = hexToRgb(area.outerColor);
+      const outerRgb = parseHex(area.outerColor);
       const bands = area.bands;
       ctx.setLineDash([]);
       ctx.lineCap = "round";
       for (let bi = 0; bi < bands; bi++) {
         const t = bands > 1 ? bi / (bands - 1) : 1;
         const w = area.width * (1 - t * 0.7);
-        const bandColor = lerpColor(outerRgb, color, t);
+        const bandColor = lerpRgb(outerRgb, color, t);
         const opacity = area.opacity * (0.4 + 0.6 * t);
         ctx.strokeStyle = `rgba(${bandColor.r},${bandColor.g},${bandColor.b},${opacity})`;
         ctx.lineWidth = w;

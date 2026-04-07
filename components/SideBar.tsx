@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Zone, SafeMargin } from "@/lib/types";
-import { classifyZone } from "@/lib/BoundaryAnimationManager";
+import { classifyZone } from "@/lib/ZoneFactory";
 import ZoneEditorPanel from "./ZoneEditorPanel";
 
 interface SideBarProps {
@@ -109,16 +109,7 @@ export default function SideBar({
               isOpen={editorOpen}
               onToggle={() => setEditorOpen((v) => !v)}
             >
-              <ZoneEditorPanel
-                zones={zones}
-                safeZones={safeZones}
-                activeZoneId={activeZoneId}
-                editMode={editMode}
-                onSetZones={onSetZones}
-                onSetSafeZones={onSetSafeZones}
-                onSetActiveZoneId={onSetActiveZoneId}
-                onSetEditMode={onSetEditMode}
-              />
+              <ZoneEditorPanel />
             </CollapsibleSection>
           </div>
         )}

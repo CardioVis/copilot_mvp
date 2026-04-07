@@ -2,34 +2,12 @@
 
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
-import SegmentationOverlay from "./SegmentationOverlay";
-import { Point, Zone, SafeMargin } from "@/lib/types";
 
 interface VideoViewportProps {
-  zones: Zone[];
-  safeZones: SafeMargin[];
-  activeZoneId: string | null;
-  editMode: boolean;
-  onUpdateZone: (zoneId: string, updates: Partial<Zone>) => void;
-  onUpdateSafeZone: (zoneId: string, updates: Partial<SafeMargin>) => void;
-  animGroupOpacity?: number;
-  labelScale: number;
-  showDangerIcon: boolean;
-  dangerBlinkOn: boolean;
+  children?: React.ReactNode;
 }
 
-export default function VideoViewport({
-  zones,
-  safeZones,
-  activeZoneId,
-  editMode,
-  onUpdateZone,
-  onUpdateSafeZone,
-  animGroupOpacity,
-  labelScale,
-  showDangerIcon,
-  dangerBlinkOn,
-}: VideoViewportProps) {
+export default function VideoViewport({ children }: VideoViewportProps) {
   const mainRef = useRef<HTMLElement>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
 
@@ -57,18 +35,7 @@ export default function VideoViewport({
         fill
         priority
       />
-      <SegmentationOverlay
-        zones={zones}
-        safeZones={safeZones}
-        activeZoneId={activeZoneId}
-        editMode={editMode}
-        onUpdateZone={onUpdateZone}
-        onUpdateSafeZone={onUpdateSafeZone}
-        animGroupOpacity={animGroupOpacity}
-        labelScale={labelScale}
-        showDangerIcon={showDangerIcon}
-        dangerBlinkOn={dangerBlinkOn}
-      />
+      {children}
       </div>
     </main>
   );

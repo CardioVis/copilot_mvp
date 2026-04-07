@@ -1,29 +1,8 @@
-import { SafeZone, DangerZone, OtherZone, Zone } from "./types";
-import { DANGER_LABELS, SAFE_LABELS, OTHER_LABELS, IGNORED_LABELS } from "./overlayConfig";
+import { IGNORED_LABELS } from "./overlayConfig";
+import { classifyZone, type ZoneCategory } from "./ZoneFactory";
 
-// ── Zone classification ───────────────────────────────────────────────────────
-export type ZoneCategory = "danger" | "safe" | "other" | "unknown";
-
-export function classifyZone(label: string): ZoneCategory {
-  if (DANGER_LABELS.has(label)) return "danger";
-  if (SAFE_LABELS.has(label)) return "safe";
-  if (OTHER_LABELS.has(label)) return "other";
-  return "unknown";
-}
-
-export function createClassifiedZone(label: string): Zone {
-  const category = classifyZone(label);
-  switch (category) {
-    case "danger":
-      return new DangerZone(label, label);
-    case "safe":
-      return new SafeZone(label, label);
-    case "other":
-      return new OtherZone(label, label);
-    default:
-      return new SafeZone(label, label);
-  }
-}
+// Re-export for backward compatibility
+export { classifyZone, createClassifiedZone, type ZoneCategory } from "./ZoneFactory";
 
 // ── Per-zone tracking state ───────────────────────────────────────────────────
 

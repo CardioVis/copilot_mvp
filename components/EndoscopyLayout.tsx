@@ -1,54 +1,33 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import TaskBar, { AppTab } from "@/components/TaskBar";
 import SideBar from "@/components/SideBar";
 import VideoViewport from "@/components/VideoViewport";
+import SegmentationOverlay from "@/components/SegmentationOverlay";
 import ImageGallery from "@/components/ImageGallery";
 import VideoPlayerTab from "@/components/VideoPlayerTab";
-import { Point, Zone, SafeMargin } from "@/lib/types";
-import { useZoneAnimation } from "@/hooks/useZoneAnimation";
+import { ZoneEditorProvider, useZoneEditor } from "@/contexts/ZoneEditorContext";
 
 export default function EndoscopyLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <ZoneEditorProvider>
+      <EndoscopyLayoutInner />
+    </ZoneEditorProvider>
+  );
+}
+
+function EndoscopyLayoutInner() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeTab, setActiveTab] = useState<AppTab>("video");
-  const [zones, setZones] = useState<Zone[]>([]);
-  const [safeZones, setSafeZones] = useState<SafeMargin[]>([]);
-  const [activeZoneId, setActiveZoneId] = useState<string | null>(null);
-  const [editMode, setEditMode] = useState(false);
 
-  const {
-    isAnimating,
-    toggleAnimation,
-    animGroupOpacity,
-    labelScale,
-    showDangerIcon,
-    dangerBlinkOn,
-  } = useZoneAnimation();
-
-  const handleUpdateZone = useCallback(
-    (zoneId: string, updates: Partial<Zone>) => {
-      setZones((prev) =>
-        prev.map((z) => (z.id === zoneId ? { ...z, ...updates } : z))
-      );
-    },
-    []
-  );
-
-  const handleUpdateSafeZone = useCallback(
-    (zoneId: string, updates: Partial<SafeMargin>) => {
-      setSafeZones((prev) =>
-        prev.map((z) => (z.id === zoneId ? { ...z, ...updates } : z))
-      );
-    },
-    []
-  );
+  const ctx = useZoneEditor();
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-black text-zinc-100">
       <TaskBar
-        isAnimating={isAnimating}
-        onToggleAnimation={toggleAnimation}
+        isAnimating={ctx.isAnimating}
+        onToggleAnimation={ctx.toggleAnimation}
         activeTab={activeTab}
         onTabChange={setActiveTab}
       />
@@ -57,27 +36,18 @@ export default function EndoscopyLayout({ children }: { children: React.ReactNod
           <>
             <SideBar
               isOpen={sidebarOpen}
-              zones={zones}
-              safeZones={safeZones}
-              activeZoneId={activeZoneId}
-              editMode={editMode}
-              onSetZones={setZones}
-              onSetSafeZones={setSafeZones}
-              onSetActiveZoneId={setActiveZoneId}
-              onSetEditMode={setEditMode}
+              zones={ctx.zones}
+              safeZones={ctx.safeZones}
+              activeZoneId={ctx.activeZoneId}
+              editMode={ctx.editMode}
+              onSetZones={ctx.setZones}
+              onSetSafeZones={ctx.setSafeZones}
+              onSetActiveZoneId={ctx.setActiveZoneId}
+              onSetEditMode={ctx.setEditMode}
             />
-            <VideoViewport
-              zones={zones}
-              safeZones={safeZones}
-              activeZoneId={activeZoneId}
-              editMode={editMode}
-              onUpdateZone={handleUpdateZone}
-              onUpdateSafeZone={handleUpdateSafeZone}
-              animGroupOpacity={animGroupOpacity}
-              labelScale={labelScale}
-              showDangerIcon={showDangerIcon}
-              dangerBlinkOn={dangerBlinkOn}
-            />
+            <VideoViewport>
+              <SegmentationOverlay />
+            </VideoViewport>
           </>
         ) : activeTab === "gallery" ? (
           <ImageGallery />
